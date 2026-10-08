@@ -118,7 +118,7 @@ jobs:
           if [ "${{ runner.os }}" = "Windows" ]; then
             CLI_ARTIFACT="${CLI_ARTIFACT}.exe"
           fi
-          go build -trimpath -ldflags "-X main.releaseVersion=$RELEASE_VERSION" -o "cli-bin/$CLI_ARTIFACT" ./cmd/eiksy-cli
+          go build -trimpath -ldflags "-s -w -X main.releaseVersion=$RELEASE_VERSION" -o "cli-bin/$CLI_ARTIFACT" ./cmd/eiksy-cli
 
       - name: Upload CLI release artifact
         uses: actions/upload-artifact@v4

@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p cli-bin
-          go build -trimpath -ldflags "-X main.releaseVersion=$RELEASE_VERSION" -o cli-bin/eiksy-cli-linux-amd64 .
+          go build -trimpath -ldflags "-s -w -X main.releaseVersion=$RELEASE_VERSION" -o cli-bin/eiksy-cli-linux-amd64 ./cmd/eiksy-cli
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

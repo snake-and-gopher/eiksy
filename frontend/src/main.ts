@@ -37,7 +37,7 @@ import {
   SelectDownloadDirectory,
   SelectAIProvider,
   SelectUploadFiles,
-  SendChatMessage,
+  SendPlainChatMessage,
   SendSSHInput,
   ResizeTerminal,
   StartLocalModel,
@@ -281,7 +281,6 @@ class EiksyShell {
   private sessionTagDraft = "";
   private sessionTagInputVisible = false;
   private chatDraftMessage = "";
-  private includeLastCommandOutput = false;
   private terminalOutputHistory = new Map<string, string>();
   private aiStatus: "idle" | "thinking" = "idle";
   private cloudModels: string[] = [];
@@ -1254,15 +1253,12 @@ class EiksyShell {
       this.syncChatFormFromDOM();
       const message = this.chatDraftMessage;
       if (!message.trim()) return;
-      const payload = this.includeLastCommandOutput
-        ? this.withLatestTerminalOutput(message)
-        : message;
-      const activeSessionID = this.activeTab()?.id ?? "";
+      const payload = message;
       this.aiStatus = "thinking";
       this.render();
       try {
         const sent = await this.withMasterPasswordRetry(
-          () => SendChatMessage(payload, activeSessionID),
+          () => SendPlainChatMessage(payload),
           "Master password setup was cancelled, so the saved AI provider token remains locked.",
         );
         if (typeof sent === "undefined") {
@@ -2389,10 +2385,6 @@ class EiksyShell {
                 <form class="chat-input-form" data-chat-form>
                     ${this.aiStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Thinking…</div>' : ""}
                     <textarea class="chat-textarea" name="message" placeholder="Ask the assistant… (Ctrl+Enter to send)" aria-label="Assistant message" rows="3">${escapeHtml(this.chatDraftMessage)}</textarea>
-                    <label class="inline-check chat-attach-row">
-                        <span>Attach latest console output</span>
-                        <input name="includeLastOutput" type="checkbox" ${this.includeLastCommandOutput ? "checked" : ""} />
-                    </label>
                     <button class="action-button" type="submit" ${this.aiStatus === "thinking" ? "disabled" : ""}>Send</button>
                 </form>
                 `

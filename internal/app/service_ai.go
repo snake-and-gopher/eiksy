@@ -589,6 +589,38 @@ func (s *Service) SendChatMessage(ctx context.Context, message string, activeSes
 	}
 	return nil
 }
+
+ // SendPlainChatMessage is the sidebar's provider-only chat path. It deliberately
+ // omits session context, Eiksy system prompts, and tool schemas.
+func (s *Service) SendPlainChatMessage(ctx context.Context, message string) error {
+	message = strings.TrimSpace(message)
+	if message == "" { return fmt.Errorf("message cannot be empty") }
+	state := s.store.AIState()
+	provider, err := s.activeConfiguredProvider(state)
+	if err != nil { return err }
+	if provider == nil { return fmt.Errorf("no AI provider is configured; configure one in Settings first") }
+	messages := make([]nativeChatMessage, 0, len(state.Messages)+1)
+	for _, previous := range state.Messages {
+		if previous.Role == "user" || previous.Role == "assistant" {
+			messages = append(messages, nativeChatMessage{Role: previous.Role, Content: previous.Content})
+		}
+	}
+	messages = append(messages, nativeChatMessage{Role: "user", Content: message})
+	s.emitFn("ai:status", map[string]string{"status": "thinking"})
+	defer s.emitFn("ai:status", map[string]string{"status": "idle"})
+	response, err := s.callNativeToolCompletion(s.resolveContext(ctx), provider, messages, "", nil)
+	if err != nil { return fmt.Errorf("AI request failed: %w", err) }
+	if len(response.ToolCalls) != 0 { return fmt.Errorf("plain chat provider returned unsupported tool calls") }
+	reply := strings.TrimSpace(response.Content)
+	if reply == "" { return fmt.Errorf("AI returned an empty response") }
+	latest := s.store.AIState()
+	latest.Messages = append(latest.Messages, ai.ChatMessage{Role: "user", Content: message}, ai.ChatMessage{Role: "assistant", Content: reply})
+	if err := s.store.UpdateAIState(latest); err != nil { return fmt.Errorf("persist AI chat response: %w", err) }
+	s.emitFn("ai:message", map[string]string{"role": "user", "content": message})
+	s.emitFn("ai:message", map[string]string{"role": "assistant", "content": reply})
+	return nil
+}
+
 func (s *Service) activeConfiguredProvider(state ai.WorkspaceState) (*ai.ProviderDescriptor, error) {
 	for i := range state.Providers {
 		if state.Providers[i].Selected && state.Providers[i].Configured {

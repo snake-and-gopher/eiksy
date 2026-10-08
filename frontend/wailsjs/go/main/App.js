@@ -130,6 +130,10 @@ export function SendChatMessage(arg1, arg2) {
   return window['go']['main']['App']['SendChatMessage'](arg1, arg2);
 }
 
+export function SendPlainChatMessage(arg1) {
+  return window['go']['main']['App']['SendPlainChatMessage'](arg1);
+}
+
 export function ClearChat() {
   return window['go']['main']['App']['ClearChat']();
 }

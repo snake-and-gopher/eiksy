@@ -158,6 +158,12 @@ func (a *App) SendChatMessage(message, activeSessionID string) error {
 	message, contextSessionID := prepareAIChatMessage(message, activeSessionID)
 	return a.currentService().SendChatMessage(a.ctx, message, contextSessionID)
 }
+
+// SendPlainChatMessage is the sidebar's ordinary model-chat endpoint. It accepts
+// no session identifier and cannot invoke Eiksy command tools.
+func (a *App) SendPlainChatMessage(message string) error {
+	return a.currentService().SendPlainChatMessage(a.ctx, message)
+}
 func (a *App) ClearChat() error { return a.currentService().ClearChat() }
 func (a *App) UpdateCommandPolicy(policy ai.CommandPolicy) error { return a.currentService().UpdateCommandPolicy(policy) }
 

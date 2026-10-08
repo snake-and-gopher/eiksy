@@ -443,3 +443,38 @@ func TestEmitNativeOperationRedactsAndBoundsOutput(t *testing.T) {
 		t.Fatal("event stderr contains secret")
 	}
 }
+
+
+func TestCallNativeToolCompletionPlainChatOmitsAgentMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := body["tools"]; ok {
+			t.Errorf("plain chat must not send tools: %#v", body["tools"])
+		}
+		if _, ok := body["tool_choice"]; ok {
+			t.Errorf("plain chat must not send tool_choice: %#v", body["tool_choice"])
+		}
+		if _, ok := body["parallel_tool_calls"]; ok {
+			t.Errorf("plain chat must not send parallel_tool_calls: %#v", body["parallel_tool_calls"])
+		}
+		if _, ok := body["user"]; ok {
+			t.Errorf("plain chat must not send an Eiksy/session identity: %#v", body["user"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hello"}}]}`))
+	}))
+	defer server.Close()
+
+	service := NewService(memory.NewStore(), nil, nil)
+	provider := &ai.ProviderDescriptor{Model: "test-model", Endpoint: server.URL}
+	result, err := service.callNativeToolCompletion(context.Background(), provider, []nativeChatMessage{{Role: "user", Content: "hello"}}, "", nil)
+	if err != nil {
+		t.Fatalf("call plain completion: %v", err)
+	}
+	if result.Content != "hello" {
+		t.Fatalf("expected assistant response, got %#v", result)
+	}
+}

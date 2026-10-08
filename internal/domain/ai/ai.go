@@ -105,7 +105,6 @@ type WorkspaceState struct {
 	ContextPolicy         ContextPolicy          `json:"contextPolicy"`
 	CommandPolicy         CommandPolicy          `json:"commandPolicy"`
 	Messages              []ChatMessage          `json:"messages"`
-	AgentMessages         []ChatMessage          `json:"agentMessages,omitempty"`
 	ChatSessionID         string                 `json:"chatSessionId"`
 	ChatSessions          []ChatSession          `json:"chatSessions,omitempty"`
 	PendingNativeToolCall *PendingNativeToolCall `json:"pendingNativeToolCall,omitempty"`

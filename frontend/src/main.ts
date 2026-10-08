@@ -281,7 +281,6 @@ class EiksyShell {
   private sessionTagDraft = "";
   private sessionTagInputVisible = false;
   private chatDraftMessage = "";
-  private terminalOutputHistory = new Map<string, string>();
   private aiStatus: "idle" | "thinking" = "idle";
   private cloudModels: string[] = [];
   private cloudModelsEndpoint = "";
@@ -1967,7 +1966,6 @@ class EiksyShell {
     terminal?.terminal.dispose();
     terminal?.wrapper.remove();
     this.terminals.delete(tabID);
-    this.terminalOutputHistory.delete(tabID);
     try {
       await DisconnectSSH(tabID);
     } catch {
@@ -2220,9 +2218,6 @@ class EiksyShell {
         if (!chunk) {
           return;
         }
-        const current = this.terminalOutputHistory.get(tabID) ?? "";
-        const updated = `${current}${chunk}`;
-        this.terminalOutputHistory.set(tabID, updated.slice(-12000));
       },
     );
 
@@ -2276,9 +2271,6 @@ class EiksyShell {
     this.chatDraftMessage =
       form.querySelector<HTMLTextAreaElement>('textarea[name="message"]')
         ?.value ?? "";
-    this.includeLastCommandOutput =
-      form.querySelector<HTMLInputElement>('input[name="includeLastOutput"]')
-        ?.checked ?? false;
   }
 
   private renderSidebarPanel(): string {
@@ -3329,36 +3321,6 @@ class EiksyShell {
                 </div>
             </div>
         `;
-  }
-
-  private withLatestTerminalOutput(message: string): string {
-    const output = this.latestActiveTerminalOutput();
-    if (!output) {
-      return message;
-    }
-    return `${message}\n\n[Latest console output]\n${output}`;
-  }
-
-  private latestActiveTerminalOutput(): string {
-    const activeTab = this.activeTab();
-    if (!activeTab) {
-      return "";
-    }
-    const text = this.terminalOutputHistory.get(activeTab.id) ?? "";
-    if (!text.trim()) {
-      return "";
-    }
-    const normalized = text
-      .replace(/\r/g, "")
-      .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, "");
-    const lines = normalized
-      .split("\n")
-      .map((line) => line.trimEnd())
-      .filter((line) => line.trim() !== "");
-    if (lines.length === 0) {
-      return "";
-    }
-    return lines.slice(-24).join("\n");
   }
 
   private pickActiveTabID(preferredID: string): string {

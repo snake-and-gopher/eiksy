@@ -2934,7 +2934,7 @@ class EiksyShell {
       return '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
     }
     const boundSession = this.shellState?.activeSessions.find((session) => session.id === this.agentBoundSessionID);
-    const boundLabel = boundSession ? (boundSession.name || boundSession.id) : (this.agentBoundSessionID || "not bound");
+    const boundLabel = boundSession ? (boundSession.title || boundSession.id) : (this.agentBoundSessionID || "not bound");
     return `
       <div class="agent-workspace-header">
         <div>

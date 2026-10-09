@@ -55,3 +55,27 @@ func TestActiveSessionDisconnectRemovesConnection(t *testing.T) {
 		t.Fatal("expected pending host key to be removed")
 	}
 }
+
+func TestConnectPreservesOutputHandlerWhenReplacingConnection(t *testing.T) {
+	m := NewManager()
+	called := false
+	handler := func(string) { called = true }
+	m.SetOutputHandler("tab-1", handler)
+
+	// A refused local connection fails before a shell starts, but Connect must
+	// not silently discard the callback registered by the terminal UI.
+	if err := m.Connect(t.Context(), "tab-1", "127.0.0.1", 1, "user", "password", nil); err == nil {
+		t.Fatal("expected connection attempt to fail")
+	}
+
+	m.mu.RLock()
+	got := m.handlers["tab-1"]
+	m.mu.RUnlock()
+	if got == nil {
+		t.Fatal("Connect removed the terminal output handler")
+	}
+	got("test")
+	if !called {
+		t.Fatal("preserved output handler was not callable")
+	}
+}

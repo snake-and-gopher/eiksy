@@ -77,7 +77,7 @@ func (a *AIBackendAgent) run(ctx context.Context, events chan<- agentai.Event, s
 	}
 
 	latest := a.service.store.AIState()
-	reply := lastAssistantMessage(latest.Messages)
+	reply := lastAssistantMessage(latest.AgentMessages)
 	if reply != "" {
 		// The current OpenAI-compatible backend returns a complete assistant
 		// message. It is exposed as one delta now; future streaming providers can

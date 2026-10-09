@@ -78,12 +78,12 @@ func TestThinkConnectOperateAcceptance(t *testing.T) {
 	// OPERATE -> THINK: bounded operation result returns to the AI conversation.
 	finalState := store.AIState()
 	if finalState.PendingNativeToolCall != nil || len(finalState.CommandPolicy.PendingRequests) != 0 { t.Fatal("approval continuation state was not cleared") }
-	if len(finalState.Messages) < 2 {
-		t.Fatalf("expected conversation history, got %#v", finalState.Messages)
+	if len(finalState.AgentMessages) < 2 {
+		t.Fatalf("expected conversation history, got %#v", finalState.AgentMessages)
 	}
 	foundUser := false
 	foundFinal := false
-	for _, message := range finalState.Messages {
+	for _, message := range finalState.AgentMessages {
 		if message.Role == "user" && message.Content == "Check the connected host." {
 			foundUser = true
 		}
@@ -92,7 +92,7 @@ func TestThinkConnectOperateAcceptance(t *testing.T) {
 		}
 	}
 	if !foundUser || !foundFinal {
-		t.Fatalf("unexpected final conversation: %#v", finalState.Messages)
+		t.Fatalf("unexpected final conversation: %#v", finalState.AgentMessages)
 	}
 	audit := service.GetCommandAuditTrail()
 	var executedAudit *ai.CommandAuditEvent

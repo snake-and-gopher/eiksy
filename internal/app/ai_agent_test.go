@@ -64,12 +64,12 @@ func TestAIBackendAgentRunUsesExistingAIService(t *testing.T) {
 	}
 
 	finalState := store.AIState()
-	if len(finalState.Messages) != 2 ||
-		finalState.Messages[0].Role != "user" ||
-		finalState.Messages[0].Content != "hello" ||
-		finalState.Messages[1].Role != "assistant" ||
-		finalState.Messages[1].Content != "backend reply" {
-		t.Fatalf("unexpected persisted messages: %#v", finalState.Messages)
+	if len(finalState.AgentMessages) != 2 ||
+		finalState.AgentMessages[0].Role != "user" ||
+		finalState.AgentMessages[0].Content != "hello" ||
+		finalState.AgentMessages[1].Role != "assistant" ||
+		finalState.AgentMessages[1].Content != "backend reply" {
+		t.Fatalf("unexpected persisted messages: %#v", finalState.AgentMessages)
 	}
 }
 

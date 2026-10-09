@@ -79,8 +79,8 @@ func TestOperateThinkLoopContinuesAfterOperationResult(t *testing.T) {
 	finalState := store.AIState()
 	if finalState.PendingNativeToolCall != nil || len(finalState.CommandPolicy.PendingRequests) != 0 { t.Fatal("operation loop left pending continuation state") }
 	foundFinal := false
-	for _, message := range finalState.Messages { if message.Role == "assistant" && message.Content == "The host checks are complete." { foundFinal = true; break } }
-	if !foundFinal { t.Fatalf("final reasoning response was not persisted: %#v", finalState.Messages) }
+	for _, message := range finalState.AgentMessages { if message.Role == "assistant" && message.Content == "The host checks are complete." { foundFinal = true; break } }
+	if !foundFinal { t.Fatalf("final reasoning response was not persisted: %#v", finalState.AgentMessages) }
 }
 
 func nativeToolCallResponse(id, sessionID, command, reason string) map[string]any {

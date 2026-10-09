@@ -163,6 +163,7 @@ export namespace ai {
 	    contextPolicy: ContextPolicy;
 	    commandPolicy: CommandPolicy;
 	    messages: ChatMessage[];
+	    agentMessages: ChatMessage[];
 	    chatSessionId: string;
 	
 	    static createFrom(source: any = {}) {
@@ -175,6 +176,7 @@ export namespace ai {
 	        this.contextPolicy = this.convertValues(source["contextPolicy"], ContextPolicy);
 	        this.commandPolicy = this.convertValues(source["commandPolicy"], CommandPolicy);
 	        this.messages = this.convertValues(source["messages"], ChatMessage);
+	        this.agentMessages = this.convertValues(source["agentMessages"], ChatMessage);
 	        this.chatSessionId = source["chatSessionId"];
 	    }
 	

@@ -404,7 +404,8 @@ func TestNativeToolApprovalResumesConversation(t *testing.T) {
 	finalState := store.AIState()
 	if finalState.PendingNativeToolCall != nil { t.Fatal("expected pending native tool call to be cleared") }
 	if len(finalState.CommandPolicy.PendingRequests) != 0 { t.Fatalf("expected pending requests to be cleared, got %d", len(finalState.CommandPolicy.PendingRequests)) }
-	if len(finalState.Messages) != 2 || finalState.Messages[0].Role != "user" || finalState.Messages[1].Content != "Command completed successfully." { t.Fatalf("unexpected final chat messages: %#v", finalState.Messages) }
+	if len(finalState.AgentMessages) != 2 || finalState.AgentMessages[0].Role != "user" || finalState.AgentMessages[1].Content != "Command completed successfully." { t.Fatalf("unexpected final agent messages: %#v", finalState.AgentMessages) }
+	if len(finalState.Messages) != 0 { t.Fatalf("agent response leaked into plain chat history: %#v", finalState.Messages) }
 }
 
 var _ sessions.Profile

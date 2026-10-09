@@ -450,6 +450,7 @@ func cloneAIState(state ai.WorkspaceState) ai.WorkspaceState {
 	cloned.Providers = append([]ai.ProviderDescriptor(nil), state.Providers...)
 	cloned.CommandPolicy = cloneCommandPolicy(state.CommandPolicy)
 	cloned.Messages = append([]ai.ChatMessage{}, state.Messages...)
+	cloned.AgentMessages = append([]ai.ChatMessage{}, state.AgentMessages...)
 	cloned.ChatSessions = make([]ai.ChatSession, len(state.ChatSessions))
 	for i, session := range state.ChatSessions { cloned.ChatSessions[i] = session; cloned.ChatSessions[i].Messages = append([]ai.ChatMessage(nil), session.Messages...) }
 	return cloned

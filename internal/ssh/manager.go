@@ -57,7 +57,16 @@ func (m *Manager) Connect(ctx context.Context, tabID, host string, port int, use
 	if port <= 0 {
 		port = 22
 	}
+	// Connect replaces the existing transport, but the output handler belongs to
+	// the UI terminal and must survive that replacement. Disconnect intentionally
+	// clears per-connection state, so preserve and restore the handler around it.
+	m.mu.RLock()
+	outputHandler := m.handlers[tabID]
+	m.mu.RUnlock()
 	_ = m.Disconnect(tabID)
+	if outputHandler != nil {
+		m.SetOutputHandler(tabID, outputHandler)
+	}
 
 	hostKey, err := m.hostKeyCallback(tabID)
 	if err != nil {

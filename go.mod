@@ -1,6 +1,6 @@
 module eiksy
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10

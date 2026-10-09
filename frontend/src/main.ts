@@ -37,7 +37,7 @@ import {
   SelectDownloadDirectory,
   SelectAIProvider,
   SelectUploadFiles,
-  SendChatMessage,
+  SendPlainChatMessage,
   SendSSHInput,
   ResizeTerminal,
   StartLocalModel,
@@ -281,8 +281,6 @@ class EiksyShell {
   private sessionTagDraft = "";
   private sessionTagInputVisible = false;
   private chatDraftMessage = "";
-  private includeLastCommandOutput = false;
-  private terminalOutputHistory = new Map<string, string>();
   private aiStatus: "idle" | "thinking" = "idle";
   private cloudModels: string[] = [];
   private cloudModelsEndpoint = "";
@@ -1254,15 +1252,12 @@ class EiksyShell {
       this.syncChatFormFromDOM();
       const message = this.chatDraftMessage;
       if (!message.trim()) return;
-      const payload = this.includeLastCommandOutput
-        ? this.withLatestTerminalOutput(message)
-        : message;
-      const activeSessionID = this.activeTab()?.id ?? "";
+      const payload = message;
       this.aiStatus = "thinking";
       this.render();
       try {
         const sent = await this.withMasterPasswordRetry(
-          () => SendChatMessage(payload, activeSessionID),
+          () => SendPlainChatMessage(payload),
           "Master password setup was cancelled, so the saved AI provider token remains locked.",
         );
         if (typeof sent === "undefined") {
@@ -1971,7 +1966,6 @@ class EiksyShell {
     terminal?.terminal.dispose();
     terminal?.wrapper.remove();
     this.terminals.delete(tabID);
-    this.terminalOutputHistory.delete(tabID);
     try {
       await DisconnectSSH(tabID);
     } catch {
@@ -2224,9 +2218,6 @@ class EiksyShell {
         if (!chunk) {
           return;
         }
-        const current = this.terminalOutputHistory.get(tabID) ?? "";
-        const updated = `${current}${chunk}`;
-        this.terminalOutputHistory.set(tabID, updated.slice(-12000));
       },
     );
 
@@ -2280,9 +2271,6 @@ class EiksyShell {
     this.chatDraftMessage =
       form.querySelector<HTMLTextAreaElement>('textarea[name="message"]')
         ?.value ?? "";
-    this.includeLastCommandOutput =
-      form.querySelector<HTMLInputElement>('input[name="includeLastOutput"]')
-        ?.checked ?? false;
   }
 
   private renderSidebarPanel(): string {
@@ -2389,10 +2377,6 @@ class EiksyShell {
                 <form class="chat-input-form" data-chat-form>
                     ${this.aiStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Thinking…</div>' : ""}
                     <textarea class="chat-textarea" name="message" placeholder="Ask the assistant… (Ctrl+Enter to send)" aria-label="Assistant message" rows="3">${escapeHtml(this.chatDraftMessage)}</textarea>
-                    <label class="inline-check chat-attach-row">
-                        <span>Attach latest console output</span>
-                        <input name="includeLastOutput" type="checkbox" ${this.includeLastCommandOutput ? "checked" : ""} />
-                    </label>
                     <button class="action-button" type="submit" ${this.aiStatus === "thinking" ? "disabled" : ""}>Send</button>
                 </form>
                 `
@@ -3337,36 +3321,6 @@ class EiksyShell {
                 </div>
             </div>
         `;
-  }
-
-  private withLatestTerminalOutput(message: string): string {
-    const output = this.latestActiveTerminalOutput();
-    if (!output) {
-      return message;
-    }
-    return `${message}\n\n[Latest console output]\n${output}`;
-  }
-
-  private latestActiveTerminalOutput(): string {
-    const activeTab = this.activeTab();
-    if (!activeTab) {
-      return "";
-    }
-    const text = this.terminalOutputHistory.get(activeTab.id) ?? "";
-    if (!text.trim()) {
-      return "";
-    }
-    const normalized = text
-      .replace(/\r/g, "")
-      .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, "");
-    const lines = normalized
-      .split("\n")
-      .map((line) => line.trimEnd())
-      .filter((line) => line.trim() !== "");
-    if (lines.length === 0) {
-      return "";
-    }
-    return lines.slice(-24).join("\n");
   }
 
   private pickActiveTabID(preferredID: string): string {

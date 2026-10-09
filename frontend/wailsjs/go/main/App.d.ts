@@ -71,6 +71,8 @@ export function UploadSFTPFiles(arg1:string,arg2:string,arg3:Array<string>):Prom
 
 export function SendChatMessage(arg1:string,arg2:string):Promise<void>;
 
+export function SendPlainChatMessage(arg1:string):Promise<void>;
+
 export function ClearChat():Promise<void>;
 
 export function UpdateCommandPolicy(arg1:ai.CommandPolicy):Promise<void>;

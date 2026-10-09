@@ -147,14 +147,21 @@ func (s *Service) nativeMessagesFromState(state ai.WorkspaceState, activeSession
 }
 
 func (s *Service) callNativeToolCompletion(ctx context.Context, provider *ai.ProviderDescriptor, messages []nativeChatMessage, chatSessionID string, tools []map[string]any) (nativeChatMessage, error) {
-	body, err := json.Marshal(map[string]any{
-		"model":               provider.Model,
-		"messages":            messages,
-		"tools":               tools,
-		"tool_choice":         "auto",
-		"parallel_tool_calls": false,
-		"user":                chatSessionID,
-	})
+	requestBody := map[string]any{
+		"model":    provider.Model,
+		"messages": messages,
+	}
+	// Plain chat must not expose tool capability or an Eiksy/session identity
+	// to the model provider. Only the agent path supplies tools and a session ID.
+	if len(tools) > 0 {
+		requestBody["tools"] = tools
+		requestBody["tool_choice"] = "auto"
+		requestBody["parallel_tool_calls"] = false
+	}
+	if strings.TrimSpace(chatSessionID) != "" {
+		requestBody["user"] = chatSessionID
+	}
+	body, err := json.Marshal(requestBody)
 	if err != nil {
 		return nativeChatMessage{}, err
 	}

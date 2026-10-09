@@ -51,8 +51,9 @@ type persistedSettings struct {
 }
 
 type persistedChatHistory struct {
-	Sessions []ai.ChatSession `json:"sessions"`
-	Legacy   []ai.ChatMessage `json:"messages,omitempty"`
+	Sessions      []ai.ChatSession `json:"sessions"`
+	Legacy        []ai.ChatMessage `json:"messages,omitempty"`
+	AgentMessages []ai.ChatMessage `json:"agentMessages,omitempty"`
 }
 
 type persistedAIWorkspaceState struct {
@@ -245,7 +246,7 @@ func (s *Store) UpdateAIState(state ai.WorkspaceState) error {
 	for i := range s.aiState.Providers {
 		s.aiState.Providers[i].Token = ""
 	}
-	if !chatMessagesEqual(previous.Messages, s.aiState.Messages) || len(s.aiState.ChatSessions) > 0 {
+	if !chatMessagesEqual(previous.Messages, s.aiState.Messages) || !chatMessagesEqual(previous.AgentMessages, s.aiState.AgentMessages) || len(s.aiState.ChatSessions) > 0 {
 		if err := s.persistAIChatHistoryLocked(s.aiState.Messages); err != nil {
 			s.aiState = previous
 			return err
@@ -543,7 +544,7 @@ func (s *Store) loadSettings() error {
 
 func (s *Store) persistAIChatHistoryLocked(messages []ai.ChatMessage) error {
 	s.syncChatSessionLocked()
-	payload, err := json.Marshal(persistedChatHistory{Sessions: s.aiState.ChatSessions, Legacy: messages})
+	payload, err := json.Marshal(persistedChatHistory{Sessions: s.aiState.ChatSessions, Legacy: messages, AgentMessages: s.aiState.AgentMessages})
 	if err != nil {
 		return fmt.Errorf("encode AI chat history: %w", err)
 	}
@@ -565,8 +566,9 @@ func (s *Store) loadAIChatHistory() ([]ai.ChatMessage, error) {
 		return nil, fmt.Errorf("load encrypted AI chat history: %w", err)
 	}
 	var envelope persistedChatHistory
-	if err := json.Unmarshal([]byte(payload), &envelope); err == nil && envelope.Sessions != nil {
+	if err := json.Unmarshal([]byte(payload), &envelope); err == nil && (envelope.Sessions != nil || envelope.AgentMessages != nil) {
 		s.aiState.ChatSessions = cloneChatSessions(envelope.Sessions)
+		s.aiState.AgentMessages = append([]ai.ChatMessage(nil), envelope.AgentMessages...)
 		if s.aiState.ChatSessionID == "" && len(s.aiState.ChatSessions) > 0 { s.aiState.ChatSessionID = s.aiState.ChatSessions[0].ID }
 		return activeChatSessionMessages(s.aiState.ChatSessions, s.aiState.ChatSessionID), nil
 	}
@@ -792,6 +794,7 @@ func cloneAIState(state ai.WorkspaceState) ai.WorkspaceState {
 	cloned.Providers = append([]ai.ProviderDescriptor(nil), state.Providers...)
 	cloned.CommandPolicy = cloneCommandPolicy(state.CommandPolicy)
 	cloned.Messages = append([]ai.ChatMessage{}, state.Messages...)
+	cloned.AgentMessages = append([]ai.ChatMessage{}, state.AgentMessages...)
 	cloned.ChatSessions = make([]ai.ChatSession, len(state.ChatSessions))
 	for i, session := range state.ChatSessions { cloned.ChatSessions[i] = session; cloned.ChatSessions[i].Messages = append([]ai.ChatMessage(nil), session.Messages...) }
 	return cloned

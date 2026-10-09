@@ -84,8 +84,8 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 			}
 			latest := s.store.AIState()
 			latest.PendingNativeToolCall = nil
-			latest.Messages = append(latest.Messages, ai.ChatMessage{Role: "user", Content: userMessage})
-			latest.Messages = append(latest.Messages, ai.ChatMessage{Role: "assistant", Content: reply})
+			latest.AgentMessages = append(latest.AgentMessages, ai.ChatMessage{Role: "user", Content: userMessage})
+			latest.AgentMessages = append(latest.AgentMessages, ai.ChatMessage{Role: "assistant", Content: reply})
 			if err := s.store.UpdateAIState(latest); err != nil {
 				return "", true, fmt.Errorf("persist AI chat response: %w", err)
 			}
@@ -140,7 +140,7 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 
 func (s *Service) nativeMessagesFromState(state ai.WorkspaceState, activeSessionID string) []nativeChatMessage {
 	messages := []nativeChatMessage{{Role: "system", Content: s.nativeToolSystemPrompt(state.CommandPolicy, activeSessionID)}}
-	for _, message := range state.Messages {
+	for _, message := range state.AgentMessages {
 		messages = append(messages, nativeChatMessage{Role: message.Role, Content: message.Content})
 	}
 	return messages

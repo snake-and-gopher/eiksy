@@ -38,6 +38,7 @@ import {
   SelectAIProvider,
   SelectUploadFiles,
   SendPlainChatMessage,
+  SendChatMessage,
   SendSSHInput,
   ResizeTerminal,
   StartLocalModel,
@@ -119,7 +120,7 @@ type TerminalTheme = "black-on-white" | "gray-on-black" | "green-on-black";
 type SettingsTab =
   "ai" | "commandpolicy" | "sshconfig" | "portforward" | "theme" | "about";
 type SessionModalTab = "host" | "auth" | "network" | "other";
-type SessionInnerTab = "console" | "sftp";
+type SessionInnerTab = "console" | "sftp" | "agent";
 type VaultAuthMethod = "token" | "oidc" | "oidc-sec" | "domain";
 type CommandPolicyTab = "access" | "tools" | "settings";
 
@@ -192,6 +193,7 @@ const TERMINAL_THEME_KEY = "eiksy-terminal-theme";
 const SIDEBAR_COLLAPSED_KEY = "eiksy-sidebar-collapsed";
 const ASSISTANT_COLLAPSED_KEY = "eiksy-assistant-collapsed";
 const SESSION_INNER_TABS_KEY = "eiksy-session-inner-tabs";
+const AGENT_BOUND_SESSION_KEY = "eiksy-agent-bound-session";
 const THEMES: Theme[] = ["dark", "light", "green"];
 const TERMINAL_THEMES: TerminalTheme[] = ["black-on-white", "gray-on-black", "green-on-black"];
 const APP_METADATA = {
@@ -228,6 +230,8 @@ class EiksyShell {
   private settingsTab: SettingsTab = "ai";
   private commandPolicyTab: CommandPolicyTab = "access";
   private sessionInnerTab: SessionInnerTab = "console";
+  private agentBoundSessionID = "";
+  private agentDraftMessage = "";
   private sessionForm: SessionFormState = this.defaultSessionForm();
   private sidebarCollapsed = false;
   private assistantCollapsed = false;
@@ -324,6 +328,7 @@ class EiksyShell {
     this.assistantCollapsed =
       localStorage.getItem(ASSISTANT_COLLAPSED_KEY) === "true";
     this.sessionInnerTabs = this.loadStoredSessionInnerTabs();
+    this.agentBoundSessionID = localStorage.getItem(AGENT_BOUND_SESSION_KEY) ?? "";
     this.applyTheme();
     this.applyFavicon();
   }
@@ -653,6 +658,9 @@ class EiksyShell {
                             </div>
                             ${this.renderSFTPBrowser()}
                         </div>
+                        <div class="agent-workspace ${this.sessionInnerTab === "agent" ? "" : "hidden"}">
+                            ${this.renderAgentWorkspace()}
+                        </div>
                     ` : `
                         <div class="empty-workspace">
                             <div class="empty-workspace-card">
@@ -919,6 +927,10 @@ class EiksyShell {
             (button.dataset.sessionInnerTab as SessionInnerTab) ??
               this.defaultSessionInnerTab(activeTab.protocolId),
           );
+          if (this.sessionInnerTab === "agent" && !this.agentBoundSessionID) {
+            this.agentBoundSessionID = activeTab.id;
+            localStorage.setItem(AGENT_BOUND_SESSION_KEY, this.agentBoundSessionID);
+          }
           this.storeSessionInnerTab(activeTab.id, this.sessionInnerTab);
           this.render();
           if (this.sessionInnerTab === "sftp") {
@@ -1273,6 +1285,40 @@ class EiksyShell {
         this.render();
       }
     });
+    const agentForm = root?.querySelector<HTMLFormElement>("[data-agent-chat-form]");
+    agentForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = agentForm.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]');
+      this.agentDraftMessage = input?.value ?? "";
+      const message = this.agentDraftMessage.trim();
+      if (!message || !this.agentBoundSessionID || this.aiStatus === "thinking") return;
+      this.aiStatus = "thinking";
+      this.render();
+      try {
+        const sent = await this.withMasterPasswordRetry(
+          () => SendChatMessage(message, this.agentBoundSessionID),
+          "Master password setup was cancelled, so the saved AI provider token remains locked.",
+        );
+        if (typeof sent === "undefined") { this.aiStatus = "idle"; this.render(); return; }
+        this.agentDraftMessage = "";
+        await this.refresh("");
+      } catch (error) {
+        this.aiStatus = "idle";
+        this.setErrorMessage(formatError("Agent request failed", error));
+        this.render();
+      }
+    });
+    agentForm?.addEventListener("input", () => {
+      this.agentDraftMessage = agentForm.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]')?.value ?? "";
+    });
+    root?.querySelector<HTMLButtonElement>("[data-agent-bind-active-session]")?.addEventListener("click", () => {
+      const active = this.activeTab();
+      if (!active) return;
+      this.agentBoundSessionID = active.id;
+      localStorage.setItem(AGENT_BOUND_SESSION_KEY, this.agentBoundSessionID);
+      this.render();
+    });
+
     chatForm?.addEventListener("input", () => {
       this.syncChatFormFromDOM();
     });
@@ -2883,6 +2929,40 @@ class EiksyShell {
         `;
   }
 
+  private renderAgentWorkspace(): string {
+    if (!this.hasConfiguredProvider()) {
+      return '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
+    }
+    const boundSession = this.shellState?.activeSessions.find((session) => session.id === this.agentBoundSessionID);
+    const boundLabel = boundSession ? (boundSession.name || boundSession.id) : (this.agentBoundSessionID || "not bound");
+    return `
+      <div class="agent-workspace-header">
+        <div>
+          <div class="eyebrow">Operate</div>
+          <h2>Agent</h2>
+          <div class="section-copy">Commands are scoped to the bound session, independently of the active session tab.</div>
+        </div>
+        <div class="agent-binding">
+          <span>Bound session: <strong>${escapeHtml(boundLabel)}</strong></span>
+          <button class="action-button secondary" type="button" data-agent-bind-active-session ${this.activeTab() ? "" : "disabled"}>Bind to active session</button>
+        </div>
+      </div>
+      <div class="agent-messages chat-messages" id="agent-messages">${this.renderAgentMessages()}</div>
+      <form class="chat-input-form" data-agent-chat-form>
+        ${this.aiStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
+        <textarea class="chat-textarea" name="agentMessage" placeholder="Ask Agent to inspect or operate on the bound session…" aria-label="Agent message" rows="3">${escapeHtml(this.agentDraftMessage)}</textarea>
+        <button class="action-button" type="submit" ${this.aiStatus === "thinking" || !this.agentBoundSessionID ? "disabled" : ""}>Run</button>
+      </form>
+    `;
+  }
+
+  private renderAgentMessages(): string {
+    const messages = (this.shellState?.ai.agentMessages ?? []).map((message) => `
+      <div class="message ${escapeClassName(message.role)}">${message.role === "assistant" ? renderMarkdown(message.content) : escapeHtml(message.content)}</div>
+    `).join("");
+    return messages || '<div class="empty-state">Agent conversation will appear here.</div>';
+  }
+
   private renderMessages(): string {
     if (!this.shellState) {
       return "";
@@ -3332,7 +3412,7 @@ class EiksyShell {
   }
 
   private availableSessionInnerTabs(_protocolId: string): SessionInnerTab[] {
-    return ["console", "sftp"];
+    return ["console", "sftp", "agent"];
   }
 
   private defaultSessionInnerTab(protocolId: string): SessionInnerTab {
@@ -3348,7 +3428,7 @@ class EiksyShell {
       const parsed = JSON.parse(stored) as Record<string, unknown>;
       return new Map<string, SessionInnerTab>(
         Object.entries(parsed).flatMap(([tabID, tabValue]) =>
-          tabValue === "console" || tabValue === "sftp"
+          tabValue === "console" || tabValue === "sftp" || tabValue === "agent"
             ? [[tabID, tabValue]]
             : [],
         ),
@@ -3430,7 +3510,7 @@ class EiksyShell {
   }
 
   private sessionInnerTabLabel(tab: SessionInnerTab): string {
-    return tab === "sftp" ? "SFTP" : "Console";
+    return tab === "sftp" ? "SFTP" : tab === "agent" ? "Agent" : "Console";
   }
 
   private activeTab(): RuntimeSession | null {

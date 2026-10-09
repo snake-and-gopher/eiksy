@@ -1608,3 +1608,12 @@ small {
     content: "Include session in AI context";
     font-size: 0.875rem;
 }
+
+
+/* Agent is a dedicated workspace, separate from the ordinary sidebar chat. */
+.agent-workspace { min-height: 0; height: 100%; display: flex; flex-direction: column; gap: 1rem; padding: 1rem; overflow: hidden; }
+.agent-workspace-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.agent-workspace-header h2 { margin: 0.2rem 0 0.35rem; }
+.agent-binding { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; font-size: 0.85rem; }
+.agent-messages { flex: 1; min-height: 0; overflow: auto; }
+.agent-workspace [data-agent-chat-form] { flex-shrink: 0; }

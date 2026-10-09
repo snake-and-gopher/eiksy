@@ -1543,55 +1543,6 @@ small {
     color: var(--color-label);
 }
 
-.notification-dialog {
-    width: min(980px, 100%);
-    height: min(740px, 90vh);
-}
-
-.notification-body {
-    padding: 1rem 1.25rem 1.25rem;
-}
-
-.notification-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-}
-
-.notification-row {
-    border: 1px solid var(--border-card);
-    border-radius: 10px;
-    background: var(--bg-card);
-    padding: 0.65rem 0.75rem;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.45rem 0.8rem;
-    align-items: start;
-}
-
-.notification-error {
-    border-color: var(--color-error-border);
-}
-
-.notification-meta {
-    display: flex;
-    gap: 0.5rem;
-    align-items: baseline;
-    color: var(--color-label);
-    font-size: 0.75rem;
-}
-
-.notification-level {
-    font-weight: 700;
-}
-
-.notification-message {
-    grid-column: 1 / 2;
-    font-size: 0.9rem;
-    color: var(--color-text);
-    overflow-wrap: anywhere;
-}
-
 .startup-state{min-height:100vh;display:grid;place-items:center;padding:32px;box-sizing:border-box;background:var(--bg-base);color:var(--color-text);text-align:center}
 .startup-state-title,.empty-workspace-title{font-size:20px;font-weight:700;margin-bottom:10px}
 .startup-state-message,.empty-workspace-message{line-height:1.5}

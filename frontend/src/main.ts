@@ -464,6 +464,16 @@ class EiksyShell {
   }
 
   private registerGlobalEvents(): void {
+    root?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const toast = target.closest<HTMLElement>(".toast");
+      if (!toast) return;
+      const toastID = toast.dataset.toastId;
+      if (!toastID) return;
+      this.toastQueue = this.toastQueue.filter((item) => item.id !== toastID);
+      this.render();
+    });
     EventsOn("app:log", (...payload: unknown[]) => {
       const data = payload[0] as
         { level?: string; message?: string; time?: string } | undefined;
@@ -3910,7 +3920,7 @@ class EiksyShell {
                 ${this.toastQueue
                   .map(
                     (item) => `
-                    <div class="toast toast-${item.level}">
+                    <div class="toast toast-${item.level}" data-toast-id="${escapeHtml(item.id)}" role="button" tabindex="0" aria-label="Dismiss notification">
                         <div class="toast-message">${escapeHtml(item.message)}</div>
                         <div class="toast-time">${escapeHtml(new Date(item.time).toLocaleTimeString())}</div>
                     </div>

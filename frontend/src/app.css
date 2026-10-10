@@ -1570,3 +1570,35 @@ small {
 .agent-workspace [data-agent-chat-form] { flex-shrink: 0; }
 
 .agent-workspace.hidden { display: none; }
+
+/* Agent permission requests are blocking, explicit user decisions. */
+.agent-permission-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(4, 8, 14, 0.78);
+  backdrop-filter: blur(5px);
+}
+.agent-permission-dialog {
+  width: min(34rem, 100%);
+  max-height: min(85vh, 48rem);
+  overflow: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color, rgba(130, 160, 190, 0.35));
+  border-radius: 14px;
+  background: var(--panel-bg, #111923);
+  color: var(--text-color, #edf3fa);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.55);
+}
+.agent-permission-eyebrow { color: var(--accent-color, #6eb8ff); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }
+.agent-permission-dialog h2 { margin: 0.55rem 0 0.5rem; }
+.agent-permission-question, .agent-permission-reason { color: var(--muted-color, #a8b5c4); line-height: 1.5; }
+.agent-permission-detail, .agent-permission-command { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.9rem; }
+.agent-permission-detail > span, .agent-permission-command > span { color: var(--muted-color, #a8b5c4); font-size: 0.78rem; }
+.agent-permission-command code { overflow-wrap: anywhere; white-space: pre-wrap; padding: 0.7rem; border-radius: 7px; background: rgba(0, 0, 0, 0.22); }
+.agent-permission-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
+.agent-permission-actions .danger { border-color: #a94b55; }

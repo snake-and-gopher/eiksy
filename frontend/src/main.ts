@@ -689,6 +689,7 @@ class EiksyShell {
             ${this.showSessionModal ? this.renderSessionModal() : ""}
             ${this.showSettingsModal ? this.renderSettingsModal() : ""}
             ${this.masterPasswordDialog.visible ? this.renderMasterPasswordDialog() : ""}
+            ${this.renderAgentPermissionDialog()}
             ${this.renderToasts()}
         `;
 
@@ -3909,6 +3910,29 @@ class EiksyShell {
   private isMasterPasswordRequiredError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return message.toLowerCase().includes("master password required");
+  }
+
+  private renderAgentPermissionDialog(): string {
+    const request = this.commandPolicy().pendingRequests[0];
+    if (!request) return "";
+    return `
+      <div class="agent-permission-backdrop" role="presentation">
+        <section class="agent-permission-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-permission-title">
+          <div class="agent-permission-eyebrow">AGENT PERMISSION REQUIRED</div>
+          <h2 id="agent-permission-title">Allow this operation?</h2>
+          <p class="agent-permission-question">The agent is requesting permission to run an operation.</p>
+          <div class="agent-permission-detail"><span>Tool</span><strong>${escapeHtml(request.toolId)}</strong></div>
+          <div class="agent-permission-command"><span>Request</span><code>${escapeHtml(request.command)}</code></div>
+          <div class="agent-permission-detail"><span>Session</span><strong>${escapeHtml(request.sessionId || "not specified")}</strong></div>
+          ${request.reason ? `<p class="agent-permission-reason">${escapeHtml(request.reason)}</p>` : ""}
+          <div class="agent-permission-actions">
+            <button class="action-button" type="button" data-command-request-action="now" data-command-request-id="${escapeHtml(request.id)}">Allow</button>
+            <button class="action-button secondary" type="button" data-command-request-action="always" data-command-request-id="${escapeHtml(request.id)}">Allow always</button>
+            <button class="action-button danger" type="button" data-command-request-action="deny" data-command-request-id="${escapeHtml(request.id)}">Deny</button>
+          </div>
+        </section>
+      </div>
+    `;
   }
 
   private renderToasts(): string {

@@ -202,7 +202,16 @@ func (s *Store) LaunchHistory() []sessions.HistoryEntry {
 func (s *Store) AIState() ai.WorkspaceState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return cloneAIState(s.aiState)
+	state := cloneAIState(s.aiState)
+	// Secret presence is deliberately not persisted in settings.json because
+	// credentials live in the encrypted vault. Rehydrate the UI-safe presence
+	// flag from the vault every time state is read, including after restart.
+	for i := range state.Providers {
+		state.Providers[i].Token = ""
+		state.Providers[i].HasToken = s.secretManager != nil &&
+			s.secretManager.SecretExists(securestorage.AIProviderTokenKey(state.Providers[i].ID))
+	}
+	return state
 }
 
 func (s *Store) Settings() settings.AppSettings {

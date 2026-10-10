@@ -212,6 +212,13 @@ func TestSecretsMoveToEncryptedSQLiteStorage(t *testing.T) {
 	if aiToken != "ai-secret-token" {
 		t.Fatalf("expected reloaded ai token, got %q", aiToken)
 	}
+	reloadedAI := reloaded.AIState()
+	if len(reloadedAI.Providers) == 0 || !reloadedAI.Providers[0].HasToken {
+		t.Fatal("expected AI token presence to be restored from encrypted storage after restart")
+	}
+	if reloadedAI.Providers[0].Token != "" {
+		t.Fatal("AI token value must never be exposed in the settings state")
+	}
 	profilePassword, err := reloaded.LoadSecret(securestorage.SessionKeyPassphraseKey("prod-ssh"))
 	if err != nil {
 		t.Fatalf("load reloaded session passphrase: %v", err)

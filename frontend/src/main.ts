@@ -315,7 +315,6 @@ class EiksyShell {
   private notifications: NotificationItem[] = [];
   private aiActivities: AIActivity[] = [];
   private toastQueue: NotificationItem[] = [];
-  private showNotificationCenter = false;
   private showSidebarActionsMenu = false;
 
   constructor() {
@@ -679,7 +678,6 @@ class EiksyShell {
             ${this.renderRemoteEditorModal()}
             ${this.showSessionModal ? this.renderSessionModal() : ""}
             ${this.showSettingsModal ? this.renderSettingsModal() : ""}
-            ${this.showNotificationCenter ? this.renderNotificationCenter() : ""}
             ${this.masterPasswordDialog.visible ? this.renderMasterPasswordDialog() : ""}
             ${this.renderToasts()}
         `;
@@ -884,13 +882,6 @@ class EiksyShell {
             ? (activeIndex - 1 + items.length) % items.length
             : items.length - 1;
         items[prevIndex]?.focus();
-      });
-    root
-      ?.querySelector<HTMLButtonElement>("[data-open-notification-center]")
-      ?.addEventListener("click", () => {
-        this.closeSidebarActionsMenu();
-        this.showNotificationCenter = true;
-        this.render();
       });
     root
       ?.querySelector<HTMLButtonElement>("[data-toggle-sidebar-panel]")
@@ -1405,7 +1396,6 @@ class EiksyShell {
           const wasSessionModalOpen = this.showSessionModal;
           this.showSessionModal = false;
           this.showSettingsModal = false;
-          this.showNotificationCenter = false;
           if (wasSessionModalOpen) {
             this.editingProfileID = "";
             this.sessionForm = this.defaultSessionForm();
@@ -1860,31 +1850,6 @@ class EiksyShell {
         this.commitSessionTagDraft();
         requestAnimationFrame(() => this.render());
       });
-    root
-      ?.querySelector<HTMLButtonElement>("[data-clear-notifications]")
-      ?.addEventListener("click", () => {
-        this.notifications = [];
-        this.toastQueue = [];
-        this.render();
-      });
-    root
-      ?.querySelectorAll<HTMLButtonElement>("[data-delete-notification]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const id = String(button.dataset.deleteNotification ?? "");
-          if (!id) {
-            return;
-          }
-          this.notifications = this.notifications.filter(
-            (notification) => notification.id !== id,
-          );
-          this.toastQueue = this.toastQueue.filter(
-            (notification) => notification.id !== id,
-          );
-          this.render();
-        });
-      });
-
     root
       ?.querySelectorAll<HTMLButtonElement>("[data-session-tag-remove]")
       .forEach((button) => {
@@ -2360,7 +2325,6 @@ class EiksyShell {
                                 : ""
                             }
                         </div>
-                        <button class="icon-button notification-button" data-open-notification-center title="Notifications" aria-label="Notifications${this.notifications.length > 0 ? `, ${this.notifications.length} unread` : ""}">${this.notifications.length > 0 ? `<span class="notification-count digits-${Math.min(String(this.notifications.length > 99 ? 99 : this.notifications.length).length + (this.notifications.length > 99 ? 1 : 0), 4)}">${this.notifications.length > 99 ? "99+" : this.notifications.length}</span>` : "🔔"}</button>
                         <button class="icon-button panel-toggle-button" data-toggle-sidebar-panel title="Collapse sessions panel" aria-label="Collapse sessions panel">◀</button>
                     </div>
                 </div>
@@ -3953,45 +3917,6 @@ class EiksyShell {
                 `,
                   )
                   .join("")}
-            </div>
-        `;
-  }
-
-  private renderNotificationCenter(): string {
-    const rows =
-      this.notifications.length > 0
-        ? this.notifications
-            .map(
-              (item) => `
-                <div class="notification-row notification-${item.level}">
-                    <div class="notification-meta">
-                        <span class="notification-level">${escapeHtml(item.level.toUpperCase())}</span>
-                        <span class="notification-time">${escapeHtml(new Date(item.time).toLocaleString())}</span>
-                    </div>
-                    <div class="notification-message">${escapeHtml(item.message)}</div>
-                    <button class="icon-button danger" data-delete-notification="${escapeHtml(item.id)}" title="Delete notification">✕</button>
-                </div>
-            `,
-            )
-            .join("")
-        : '<div class="empty-state">No notifications yet.</div>';
-    return `
-            <div class="modal-overlay">
-                <div class="modal-dialog wide notification-dialog">
-                    <div class="panel-header compact-header">
-                        <div>
-                            <div class="eyebrow">Notifications</div>
-                            <h2>Notification center</h2>
-                        </div>
-                        <div class="section-actions">
-                            <button class="action-button secondary" data-clear-notifications ${this.notifications.length === 0 ? "disabled" : ""}>Clear all</button>
-                            <button class="icon-button" data-close-modal>×</button>
-                        </div>
-                    </div>
-                    <div class="modal-body notification-body">
-                        <div class="notification-list">${rows}</div>
-                    </div>
-                </div>
             </div>
         `;
   }

@@ -960,6 +960,17 @@ class EiksyShell {
         this.syncSessionFormFromDOM(event.target);
       });
     root
+      ?.querySelectorAll<HTMLInputElement>(
+        '[data-session-form] input[name="password"], [data-session-form] input[name="keyPassphrase"]',
+      )
+      .forEach((input) => {
+        input.addEventListener("focus", () => {
+          if (input.value === MASKED_SECRET_VALUE) {
+            input.select();
+          }
+        });
+      });
+    root
       ?.querySelector<HTMLSelectElement>('select[name="protocolId"]')
       ?.addEventListener("change", (event) => {
         const select = event.currentTarget as HTMLSelectElement;

@@ -72,6 +72,9 @@ type CommandPolicyState = {
 type FileEntry = sftpModels.FileEntry;
 type SecureStorageStatus = securestorageModels.Status;
 
+// This marker is UI-only: it is never sent to secure storage as a credential.
+const MASKED_SECRET_VALUE = "********";
+
 type SessionFormState = {
   name: string;
   host: string;
@@ -1730,10 +1733,18 @@ class EiksyShell {
           ),
           username: String(formData.get("username") ?? ""),
           password: String(
-            authMethod === "password" ? (formData.get("password") ?? "") : "",
+            authMethod === "password"
+              ? (formData.get("password") === MASKED_SECRET_VALUE && this.sessionForm.hasSavedPassword
+                  ? ""
+                  : (formData.get("password") ?? ""))
+              : "",
           ),
           keyPassphrase: String(
-            authMethod === "key" ? (formData.get("keyPassphrase") ?? "") : "",
+            authMethod === "key"
+              ? (formData.get("keyPassphrase") === MASKED_SECRET_VALUE && this.sessionForm.hasSavedKeyPassphrase
+                  ? ""
+                  : (formData.get("keyPassphrase") ?? ""))
+              : "",
           ),
           protocolId,
           tags: this.sessionForm.tags,
@@ -3269,9 +3280,9 @@ class EiksyShell {
                                   this.sessionForm.authMethod === "key" &&
                                   supportsKeyAuth
                                     ? `<label><span>Private key path</span><input name="privateKeyPath" value="${escapeHtml(this.sessionForm.privateKeyPath)}" placeholder="~/.ssh/id_ed25519" required /></label>
-                                       <label><span>Key passphrase</span><input name="keyPassphrase" type="password" value="${escapeHtml(this.sessionForm.keyPassphrase)}" placeholder="Optional" /></label>
+                                       <label><span>Key passphrase</span><input name="keyPassphrase" type="password" value="${escapeHtml(this.sessionForm.hasSavedKeyPassphrase && !this.sessionForm.keyPassphrase ? MASKED_SECRET_VALUE : this.sessionForm.keyPassphrase)}" placeholder="Optional" /></label>
                                        ${isEditing && this.sessionForm.hasSavedKeyPassphrase ? '<div class="section-copy">Leave the key passphrase blank to keep the saved encrypted passphrase.</div>' : ""}`
-                                    : `<label><span>Password</span><input name="password" type="password" value="${escapeHtml(this.sessionForm.password)}" /></label>
+                                    : `<label><span>Password</span><input name="password" type="password" value="${escapeHtml(this.sessionForm.hasSavedPassword && !this.sessionForm.password ? MASKED_SECRET_VALUE : this.sessionForm.password)}" /></label>
                                        ${isEditing && this.sessionForm.hasSavedPassword ? '<div class="section-copy">Leave the password blank to keep the saved encrypted password.</div>' : ""}`
                                 }
                             </div>

@@ -235,6 +235,7 @@ class EiksyShell {
   private sessionInnerTab: SessionInnerTab = "console";
   private agentBoundSessionID = "";
   private agentDraftMessage = "";
+  private agentStatus: "idle" | "thinking" = "idle";
   private dismissedAgentApprovalID = "";
   private resolvingAgentApprovalID = "";
   private sessionForm: SessionFormState = this.defaultSessionForm();
@@ -496,6 +497,14 @@ class EiksyShell {
       this.render();
     });
     EventsOn("ai:message", () => {
+      void this.refresh("");
+    });
+    EventsOn("agent:status", (...payload: unknown[]) => {
+      const data = payload[0] as { status?: string } | undefined;
+      this.agentStatus = data?.status === "thinking" ? "thinking" : "idle";
+      this.render();
+    });
+    EventsOn("agent:message", () => {
       void this.refresh("");
     });
     EventsOn("ai:operate", (...payload: unknown[]) => {
@@ -1314,19 +1323,19 @@ class EiksyShell {
       const input = agentForm.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]');
       this.agentDraftMessage = input?.value ?? "";
       const message = this.agentDraftMessage.trim();
-      if (!message || !this.agentBoundSessionID || this.aiStatus === "thinking") return;
-      this.aiStatus = "thinking";
+      if (!message || !this.agentBoundSessionID || this.agentStatus === "thinking") return;
+      this.agentStatus = "thinking";
       this.render();
       try {
         const sent = await this.withMasterPasswordRetry(
           () => SendChatMessage(message, this.agentBoundSessionID),
           "Master password setup was cancelled, so the saved AI provider token remains locked.",
         );
-        if (typeof sent === "undefined") { this.aiStatus = "idle"; this.render(); return; }
+        if (typeof sent === "undefined") { this.agentStatus = "idle"; this.render(); return; }
         this.agentDraftMessage = "";
         await this.refresh("");
       } catch (error) {
-        this.aiStatus = "idle";
+        this.agentStatus = "idle";
         this.setErrorMessage(formatError("Agent request failed", error));
         this.render();
       }
@@ -2956,9 +2965,9 @@ class EiksyShell {
     return `
       <div class="agent-messages chat-messages" id="agent-messages">${this.renderAgentMessages()}</div>
       <form class="chat-input-form" data-agent-chat-form>
-        ${this.aiStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
+        ${this.agentStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
         <textarea class="chat-textarea" name="agentMessage" placeholder="Ask Agent…" aria-label="Agent message" rows="3">${escapeHtml(this.agentDraftMessage)}</textarea>
-        <button class="action-button" type="submit" ${this.aiStatus === "thinking" ? "disabled" : ""}>Send</button>
+        <button class="action-button" type="submit" ${this.agentStatus === "thinking" ? "disabled" : ""}>Send</button>
       </form>
     `;
   }

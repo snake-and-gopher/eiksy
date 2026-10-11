@@ -64,8 +64,8 @@ func TestDispatchNativeDiagnosticsSummaryUsesFixedCommands(t *testing.T) {
 	if len(ssh.commands) != 6 {
 		t.Fatalf("expected six SSH executions, got %#v", ssh.commands)
 	}
-	if eventName != "ai:operate" {
-		t.Fatalf("expected ai:operate event, got %q", eventName)
+	if eventName != "agent:operate" {
+		t.Fatalf("expected agent:operate event, got %q", eventName)
 	}
 	eventPayload, ok := eventData.(map[string]any)
 	if !ok {

@@ -581,8 +581,8 @@ func (s *Service) SendChatMessage(ctx context.Context, message string, activeSes
 	if provider == nil {
 		return fmt.Errorf("no AI provider is configured; configure one in Settings first")
 	}
-	s.emitFn("ai:status", map[string]string{"status": "thinking"})
-	defer s.emitFn("ai:status", map[string]string{"status": "idle"})
+	s.emitFn("agent:status", map[string]string{"status": "thinking"})
+	defer s.emitFn("agent:status", map[string]string{"status": "idle"})
 	_, _, err = s.sendChatMessageWithNativeTools(s.resolveContext(ctx), provider, state, activeSessionID, message)
 	if err != nil {
 		return fmt.Errorf("AI request failed: %w", err)

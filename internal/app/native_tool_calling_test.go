@@ -182,7 +182,7 @@ func TestDispatchNativeSFTPReadEmitsRedactedActivity(t *testing.T) {
 	call.Function.Arguments = "{\"sessionId\":\"session-1\",\"path\":\"/tmp/secret.conf\"}"
 	_, pending, err := service.dispatchNativeToolCall(call, store.AIState().CommandPolicy, "session-1", "provider-1", "inspect", nil)
 	if err != nil || pending { t.Fatalf("expected successful read: pending=%v err=%v", pending, err) }
-	if eventName != "ai:operate" { t.Fatalf("expected ai:operate event, got %q", eventName) }
+	if eventName != "agent:operate" { t.Fatalf("expected agent:operate event, got %q", eventName) }
 	payload, ok := eventData.(map[string]any)
 	if !ok { t.Fatalf("unexpected event payload type %T", eventData) }
 	if payload["status"] != "executed" { t.Fatalf("expected executed status, got %#v", payload["status"]) }
@@ -296,7 +296,7 @@ func TestDispatchNativeSFTPListEmitsRedactedActivity(t *testing.T) {
 	call.Function.Arguments = `{"sessionId":"session-1","path":"/etc"}`
 	_, pending, err := service.dispatchNativeToolCall(call, store.AIState().CommandPolicy, "session-1", "provider-1", "inspect files", nil)
 	if err != nil || pending { t.Fatalf("expected successful read-only listing: pending=%v err=%v", pending, err) }
-	if eventName != "ai:operate" { t.Fatalf("expected ai:operate event, got %q", eventName) }
+	if eventName != "agent:operate" { t.Fatalf("expected agent:operate event, got %q", eventName) }
 	payload, ok := eventData.(map[string]any)
 	if !ok { t.Fatalf("unexpected event payload type %T", eventData) }
 	if payload["status"] != "executed" { t.Fatalf("expected executed status, got %#v", payload["status"]) }
@@ -427,8 +427,8 @@ func TestEmitNativeOperationRedactsAndBoundsOutput(t *testing.T) {
 		Stderr: "Authorization: Bearer super-secret",
 		DurationMs: 42,
 	}, "not_required", "")
-	if eventName != "ai:operate" {
-		t.Fatalf("expected ai:operate event, got %q", eventName)
+	if eventName != "agent:operate" {
+		t.Fatalf("expected agent:operate event, got %q", eventName)
 	}
 	payload, ok := eventData.(map[string]any)
 	if !ok {

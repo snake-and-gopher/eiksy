@@ -235,6 +235,9 @@ class EiksyShell {
   private sessionInnerTab: SessionInnerTab = "console";
   private agentBoundSessionID = "";
   private agentDraftMessage = "";
+  private agentStatus: "idle" | "thinking" = "idle";
+  private dismissedAgentApprovalID = "";
+  private resolvingAgentApprovalID = "";
   private sessionForm: SessionFormState = this.defaultSessionForm();
   private sidebarCollapsed = false;
   private assistantCollapsed = false;
@@ -496,6 +499,14 @@ class EiksyShell {
     EventsOn("ai:message", () => {
       void this.refresh("");
     });
+    EventsOn("agent:status", (...payload: unknown[]) => {
+      const data = payload[0] as { status?: string } | undefined;
+      this.agentStatus = data?.status === "thinking" ? "thinking" : "idle";
+      this.render();
+    });
+    EventsOn("agent:message", () => {
+      void this.refresh("");
+    });
     EventsOn("ai:operate", (...payload: unknown[]) => {
       const data = payload[0] as Partial<AIActivity> | undefined;
       if (!data) return;
@@ -640,6 +651,11 @@ class EiksyShell {
     if (!root || !this.shellState) {
       return;
     }
+    // The agent always follows the currently selected session; it is not an
+    // independently configurable connection.
+    const activeSession = this.activeTab();
+    this.agentBoundSessionID = activeSession?.id ?? "";
+    localStorage.setItem(AGENT_BOUND_SESSION_KEY, this.agentBoundSessionID);
 
     root.innerHTML = `
             <div class="shell-root">
@@ -1307,32 +1323,32 @@ class EiksyShell {
       const input = agentForm.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]');
       this.agentDraftMessage = input?.value ?? "";
       const message = this.agentDraftMessage.trim();
-      if (!message || !this.agentBoundSessionID || this.aiStatus === "thinking") return;
-      this.aiStatus = "thinking";
+      if (!message || !this.agentBoundSessionID || this.agentStatus === "thinking") return;
+      this.agentStatus = "thinking";
       this.render();
       try {
         const sent = await this.withMasterPasswordRetry(
           () => SendChatMessage(message, this.agentBoundSessionID),
           "Master password setup was cancelled, so the saved AI provider token remains locked.",
         );
-        if (typeof sent === "undefined") { this.aiStatus = "idle"; this.render(); return; }
+        if (typeof sent === "undefined") { this.agentStatus = "idle"; this.render(); return; }
         this.agentDraftMessage = "";
         await this.refresh("");
       } catch (error) {
-        this.aiStatus = "idle";
+        this.agentStatus = "idle";
         this.setErrorMessage(formatError("Agent request failed", error));
         this.render();
       }
     });
+    const agentInput = agentForm?.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]');
     agentForm?.addEventListener("input", () => {
-      this.agentDraftMessage = agentForm.querySelector<HTMLTextAreaElement>('textarea[name="agentMessage"]')?.value ?? "";
+      this.agentDraftMessage = agentInput?.value ?? "";
     });
-    root?.querySelector<HTMLButtonElement>("[data-agent-bind-active-session]")?.addEventListener("click", () => {
-      const active = this.activeTab();
-      if (!active) return;
-      this.agentBoundSessionID = active.id;
-      localStorage.setItem(AGENT_BOUND_SESSION_KEY, this.agentBoundSessionID);
-      this.render();
+    agentInput?.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") {
+        event.preventDefault();
+        agentForm?.requestSubmit();
+      }
     });
 
     chatForm?.addEventListener("input", () => {
@@ -1392,12 +1408,19 @@ class EiksyShell {
         button.addEventListener("click", async () => {
           const requestID = button.dataset.commandRequestId;
           const mode = button.dataset.commandRequestAction;
-          if (!requestID || !mode) return;
-          await this.runAction(
-            async () => ResolveCommandPolicyRequest(requestID, mode),
-            "Unable to resolve command request",
-          );
-          await this.refresh("");
+          if (!requestID || !mode || this.resolvingAgentApprovalID) return;
+          this.resolvingAgentApprovalID = requestID;
+          this.render();
+          try {
+            await this.runAction(
+              async () => ResolveCommandPolicyRequest(requestID, mode),
+              "Unable to resolve command request",
+            );
+            await this.refresh("");
+          } finally {
+            this.resolvingAgentApprovalID = "";
+            this.render();
+          }
         });
       });
     root
@@ -1413,6 +1436,12 @@ class EiksyShell {
           policy.localDocsPath = path.trim();
         });
       });
+
+    root?.querySelector<HTMLButtonElement>("[data-agent-permission-close]")?.addEventListener("click", () => {
+      const request = this.commandPolicy().pendingRequests[0];
+      if (request) this.dismissedAgentApprovalID = request.id;
+      this.render();
+    });
 
     root
       ?.querySelectorAll<HTMLElement>("[data-close-modal]")
@@ -2930,25 +2959,15 @@ class EiksyShell {
     if (!this.hasConfiguredProvider()) {
       return '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
     }
-    const boundSession = this.shellState?.activeSessions.find((session) => session.id === this.agentBoundSessionID);
-    const boundLabel = boundSession ? (boundSession.title || boundSession.id) : (this.agentBoundSessionID || "not bound");
+    if (!this.agentBoundSessionID) {
+      return '<div class="empty-state">Open a session to use Agent.</div>';
+    }
     return `
-      <div class="agent-workspace-header">
-        <div>
-          <div class="eyebrow">Operate</div>
-          <h2>Agent</h2>
-          <div class="section-copy">Commands are scoped to the bound session, independently of the active session tab.</div>
-        </div>
-        <div class="agent-binding">
-          <span>Bound session: <strong>${escapeHtml(boundLabel)}</strong></span>
-          <button class="action-button secondary" type="button" data-agent-bind-active-session ${this.activeTab() ? "" : "disabled"}>Bind to active session</button>
-        </div>
-      </div>
       <div class="agent-messages chat-messages" id="agent-messages">${this.renderAgentMessages()}</div>
       <form class="chat-input-form" data-agent-chat-form>
-        ${this.aiStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
-        <textarea class="chat-textarea" name="agentMessage" placeholder="Ask Agent to inspect or operate on the bound session…" aria-label="Agent message" rows="3">${escapeHtml(this.agentDraftMessage)}</textarea>
-        <button class="action-button" type="submit" ${this.aiStatus === "thinking" || !this.agentBoundSessionID ? "disabled" : ""}>Run</button>
+        ${this.agentStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
+        <textarea class="chat-textarea" name="agentMessage" placeholder="Ask Agent…" aria-label="Agent message" rows="3">${escapeHtml(this.agentDraftMessage)}</textarea>
+        <button class="action-button" type="submit" ${this.agentStatus === "thinking" ? "disabled" : ""}>Send</button>
       </form>
     `;
   }
@@ -3936,10 +3955,13 @@ class EiksyShell {
 
   private renderAgentPermissionDialog(): string {
     const request = this.commandPolicy().pendingRequests[0];
-    if (!request) return "";
+    if (request && request.id !== this.dismissedAgentApprovalID) this.dismissedAgentApprovalID = "";
+    if (!request || request.id === this.dismissedAgentApprovalID) return "";
+    const resolving = this.resolvingAgentApprovalID === request.id;
     return `
       <div class="agent-permission-backdrop" role="presentation">
         <section class="agent-permission-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-permission-title">
+          <button class="agent-permission-close" type="button" data-agent-permission-close aria-label="Close permission request" ${resolving ? "disabled" : ""}>×</button>
           <div class="agent-permission-eyebrow">AGENT PERMISSION REQUIRED</div>
           <h2 id="agent-permission-title">Allow this operation?</h2>
           <p class="agent-permission-question">The agent is requesting permission to run an operation.</p>
@@ -3948,9 +3970,9 @@ class EiksyShell {
           <div class="agent-permission-detail"><span>Session</span><strong>${escapeHtml(request.sessionId || "not specified")}</strong></div>
           ${request.reason ? `<p class="agent-permission-reason">${escapeHtml(request.reason)}</p>` : ""}
           <div class="agent-permission-actions">
-            <button class="action-button" type="button" data-command-request-action="now" data-command-request-id="${escapeHtml(request.id)}">Allow</button>
-            <button class="action-button secondary" type="button" data-command-request-action="always" data-command-request-id="${escapeHtml(request.id)}">Allow always</button>
-            <button class="action-button danger" type="button" data-command-request-action="deny" data-command-request-id="${escapeHtml(request.id)}">Deny</button>
+            <button class="action-button" type="button" data-command-request-action="now" data-command-request-id="${escapeHtml(request.id)}" ${resolving ? "disabled" : ""}>Allow</button>
+            <button class="action-button secondary" type="button" data-command-request-action="always" data-command-request-id="${escapeHtml(request.id)}" ${resolving ? "disabled" : ""}>Allow always</button>
+            <button class="action-button danger" type="button" data-command-request-action="deny" data-command-request-id="${escapeHtml(request.id)}" ${resolving ? "disabled" : ""}>Deny</button>
           </div>
         </section>
       </div>

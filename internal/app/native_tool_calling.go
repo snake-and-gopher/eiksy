@@ -89,7 +89,7 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 			if err := s.store.UpdateAIState(latest); err != nil {
 				return "", true, fmt.Errorf("persist AI chat response: %w", err)
 			}
-			s.emitFn("ai:message", map[string]string{"role": "assistant", "content": reply})
+			s.emitFn("agent:message", map[string]string{"role": "assistant", "content": reply})
 			return reply, true, nil
 		}
 
@@ -216,7 +216,7 @@ func (s *Service) emitNativeOperation(status, sessionID, command string, result 
 		"error": redactAuditValue(result.Error),
 		"message": redactAuditValue(message),
 	}
-	s.emitFn("ai:operate", payload)
+	s.emitFn("agent:operate", payload)
 }
 
 func truncateNativeOperationOutput(value string) string {
@@ -388,7 +388,7 @@ func (s *Service) dispatchNativeToolCall(call nativeToolCall, policy ai.CommandP
 		s.recordCommandAudit(providerID, args.SessionID, args.Command, string(decision), "required", "approval_required", 0, 0, ai.CommandAuditEvent{ErrorType: "approval_required"})
 		s.emitNativeOperation("approval_required", args.SessionID, args.Command, sessions.CommandExecutionResult{ExitCode: -1}, "required", reason)
 		message := fmt.Sprintf("Command permission required for session %s.\nCommand: `%s`\nReason: %s", request.SessionID, request.Command, request.Reason)
-		s.emitFn("ai:message", map[string]string{"role": "assistant", "content": message})
+		s.emitFn("agent:message", map[string]string{"role": "assistant", "content": message})
 		return fmt.Sprintf(`{"status":"approval_required","requestId":%q}`, request.ID), true, nil
 	default:
 		s.recordCommandAudit(providerID, args.SessionID, args.Command, string(decision), "not_required", "execution_failed", 0, 0, ai.CommandAuditEvent{ErrorType: "execution_error", Error: "unknown policy decision"})

@@ -155,8 +155,9 @@ func (a *App) ListCloudModels(endpoint, token string) ([]string, error) { return
 func (a *App) StartCloudProviderAuth(endpoint string) (app.CloudProviderAuthSession, error) { return a.currentService().StartCloudProviderAuth(endpoint) }
 func (a *App) GetCloudProviderAuthSession(sessionID string) (app.CloudProviderAuthSession, error) { return a.currentService().GetCloudProviderAuthSession(sessionID) }
 func (a *App) SendChatMessage(message, activeSessionID string) error {
-	message, contextSessionID := prepareAIChatMessage(message, activeSessionID)
-	return a.currentService().SendChatMessage(a.ctx, message, contextSessionID)
+	// Agent requests are always scoped to the selected session. Unlike the
+	// legacy sidebar context opt-in, this must not depend on a message marker.
+	return a.currentService().SendChatMessage(a.ctx, message, activeSessionID)
 }
 
 // SendPlainChatMessage is the sidebar's ordinary model-chat endpoint. It accepts

@@ -68,7 +68,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 		message := fmt.Sprintf("Denied command request for `%s`.", request.Command)
 		state.Messages = append(state.Messages, ai.ChatMessage{Role: "assistant", Content: message})
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist denied command request: %w", err) }
-		s.emitFn("ai:message", map[string]string{"role":"assistant","content":message})
+		s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 		return nil
 	}
 	switch mode { case ai.CommandPermissionModeAlways, ai.CommandPermissionModeSession, ai.CommandPermissionModeNow: default: return fmt.Errorf("unsupported permission mode %q", mode) }
@@ -121,7 +121,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 		if strings.TrimSpace(reason) != "" { message += fmt.Sprintf(" (%s)", reason) }
 		state.Messages = append(state.Messages, ai.ChatMessage{Role:"assistant",Content:message})
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied command request: %w", err) }
-		s.emitFn("ai:message", map[string]string{"role":"assistant","content":message})
+		s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 		return nil
 	}
 	removePending()
@@ -152,7 +152,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 	if err != nil { message = fmt.Sprintf("Command execution failed: %v", err) } else if !result.Success { message = fmt.Sprintf("Command completed with exit code %d in session %s: `%s`", result.ExitCode, request.SessionID, request.Command) }
 	state.Messages = append(state.Messages, ai.ChatMessage{Role:"assistant",Content:message})
 	if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist command result: %w", err) }
-	s.emitFn("ai:message", map[string]string{"role":"assistant","content":message})
+	s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 	return nil
 }
 

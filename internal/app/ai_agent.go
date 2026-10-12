@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 
 	agentai "eiksy/internal/ai"
-	domainai "eiksy/internal/domain/ai"
 )
 
 // AIBackendAgent adapts Eiksy's existing AI application service to the
@@ -56,7 +56,7 @@ func (a *AIBackendAgent) run(ctx context.Context, events chan<- agentai.Event, s
 	}
 	messages := a.service.nativeMessagesFromState(state, sessionID)
 	messages = append(messages, nativeChatMessage{Role: "user", Content: input})
-	_, _, err = a.service.runNativeToolLoopWithEvents(
+	reply, _, err := a.service.runNativeToolLoopWithEvents(
 		ctx,
 		provider,
 		state.ChatSessionID,
@@ -76,8 +76,23 @@ func (a *AIBackendAgent) run(ctx context.Context, events chan<- agentai.Event, s
 		return
 	}
 
-	latest := a.service.store.AIState()
-	reply := lastAssistantMessage(latest.AgentMessages)
+	// A tool call can suspend the turn while waiting for user approval. The
+	// returned value is then an approval-required JSON payload, not assistant
+	// text. Do not fall back to AgentMessages here: that history may end with
+	// an earlier assistant reply, which would be replayed as if it answered
+	// the current prompt.
+	var continuation struct {
+		Status    string `json:"status"`
+		RequestID string `json:"requestId"`
+	}
+	if json.Unmarshal([]byte(reply), &continuation) == nil && continuation.Status == "approval_required" {
+		latest := a.service.store.AIState()
+		if latest.PendingNativeToolCall != nil && latest.PendingNativeToolCall.RequestID == continuation.RequestID {
+			events <- agentai.Event{Type: agentai.EventMessageFinished}
+			return
+		}
+	}
+
 	if reply != "" {
 		// The current OpenAI-compatible backend returns a complete assistant
 		// message. It is exposed as one delta now; future streaming providers can
@@ -93,11 +108,3 @@ type errorString string
 
 func (e errorString) Error() string { return string(e) }
 
-func lastAssistantMessage(messages []domainai.ChatMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "assistant" {
-			return messages[i].Content
-		}
-	}
-	return ""
-}

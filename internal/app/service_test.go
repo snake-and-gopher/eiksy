@@ -347,6 +347,7 @@ func TestClearChatStartsFreshSession(t *testing.T) {
 	state.Messages = []ai.ChatMessage{
 		{Role: "user", Content: "old conversation"},
 	}
+	state.AgentMessages = []ai.ChatMessage{{Role: "assistant", Content: "agent conversation"}}
 	state.CommandPolicy.PendingRequests = []ai.CommandRequest{
 		{ID: "request-1", ToolID: "shell", SessionID: "session-1", Command: "uname -a"},
 	}
@@ -373,11 +374,14 @@ func TestClearChatStartsFreshSession(t *testing.T) {
 	if updated.ChatSessionID == "" || updated.ChatSessionID == previousSessionID {
 		t.Fatalf("expected a new chat session id, got %q", updated.ChatSessionID)
 	}
-	if len(updated.CommandPolicy.PendingRequests) != 0 {
-		t.Fatalf("expected pending command approvals to be cleared, got %d", len(updated.CommandPolicy.PendingRequests))
+	if len(updated.CommandPolicy.PendingRequests) != 1 || updated.CommandPolicy.PendingRequests[0].ID != "request-1" {
+		t.Fatalf("expected pending agent approval to remain untouched, got %#v", updated.CommandPolicy.PendingRequests)
 	}
-	if updated.PendingNativeToolCall != nil {
-		t.Fatalf("expected pending native tool call to be cleared, got %#v", updated.PendingNativeToolCall)
+	if updated.PendingNativeToolCall == nil || updated.PendingNativeToolCall.RequestID != "request-1" {
+		t.Fatalf("expected pending agent tool call to remain untouched, got %#v", updated.PendingNativeToolCall)
+	}
+	if len(updated.AgentMessages) != 1 || updated.AgentMessages[0].Content != "agent conversation" {
+		t.Fatalf("expected agent history to remain untouched, got %#v", updated.AgentMessages)
 	}
 }
 

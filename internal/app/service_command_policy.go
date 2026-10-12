@@ -11,18 +11,12 @@ import (
 	"eiksy/internal/domain/sessions"
 )
 
-// ClearChat starts a fresh AI session and discards all state that belongs
-// to the previous conversation, including pending approval continuations.
+// ClearChat starts a fresh ordinary AI chat. Agent history and pending agent
+// approvals belong to a separate interaction and must remain untouched.
 func (s *Service) ClearChat() error {
 	state := s.store.AIState()
 	state.Messages = []ai.ChatMessage{}
 	state.ChatSessionID = fmt.Sprintf("chat-%d", time.Now().UTC().UnixNano())
-	state.PendingNativeToolCall = nil
-
-	policy := normalizeCommandPolicy(state.CommandPolicy)
-	policy.PendingRequests = []ai.CommandRequest{}
-	state.CommandPolicy = policy
-
 	if err := s.store.UpdateAIState(state); err != nil {
 		return fmt.Errorf("clear AI chat: %w", err)
 	}
@@ -66,7 +60,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 			return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, `{"status":"approval_denied","reason":"user denied the operation"}`)
 		}
 		message := fmt.Sprintf("Denied command request for `%s`.", request.Command)
-		state.Messages = append(state.Messages, ai.ChatMessage{Role: "assistant", Content: message})
+		state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role: "assistant", Content: message})
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist denied command request: %w", err) }
 		s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 		return nil
@@ -119,7 +113,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 		removePending(); state.CommandPolicy = policy
 		message := fmt.Sprintf("Command denied by Command Policy: `%s`", request.Command)
 		if strings.TrimSpace(reason) != "" { message += fmt.Sprintf(" (%s)", reason) }
-		state.Messages = append(state.Messages, ai.ChatMessage{Role:"assistant",Content:message})
+		state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role:"assistant",Content:message})
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied command request: %w", err) }
 		s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 		return nil
@@ -150,7 +144,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 	result, err := s.executeSessionCommandResult(request.SessionID, request.Command)
 	message := fmt.Sprintf("Approved command in session %s: `%s`", request.SessionID, request.Command)
 	if err != nil { message = fmt.Sprintf("Command execution failed: %v", err) } else if !result.Success { message = fmt.Sprintf("Command completed with exit code %d in session %s: `%s`", result.ExitCode, request.SessionID, request.Command) }
-	state.Messages = append(state.Messages, ai.ChatMessage{Role:"assistant",Content:message})
+	state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role:"assistant",Content:message})
 	if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist command result: %w", err) }
 	s.emitFn("agent:message", map[string]string{"role":"assistant","content":message})
 	return nil

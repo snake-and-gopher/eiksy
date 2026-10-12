@@ -187,7 +187,7 @@ func TestAIBackendAgentRunStreamsNativeToolLifecycle(t *testing.T) {
 func TestAIBackendAgentRunDoesNotReplayPreviousReplyWhileApprovalIsPending(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(\`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"exec-1","type":"function","function":{"name":"ssh.exec","arguments":"{\"sessionId\":\"session-1\",\"command\":\"uname -a\",\"reason\":\"inspect host\"}"}}]}}]}\`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"exec-1","type":"function","function":{"name":"ssh.exec","arguments":"{\"sessionId\":\"session-1\",\"command\":\"uname -a\",\"reason\":\"inspect host\"}"}}]}}]}`))
 	}))
 	defer server.Close()
 

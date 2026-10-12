@@ -1403,3 +1403,29 @@ func TestModelResolvesPendingCommandRequestThroughSharedBackend(t *testing.T) {
 	if len(backend.aiState.CommandPolicy.PendingRequests)!=0 { t.Fatal("expected pending request to be cleared") }
 	if !strings.Contains(m.View(),"Command request resolved: session.") { t.Fatal("expected resolution confirmation") }
 }
+
+func TestChatMessagesForEventUsesSeparateAIAndAgentHistories(t *testing.T) {
+	state := appservice.ShellState{
+		AI: domainai.WorkspaceState{
+			Messages: []domainai.ChatMessage{{Role: "assistant", Content: "plain chat"}},
+			AgentMessages: []domainai.ChatMessage{
+				{Role: "user", Content: "inspect host"},
+				{Role: "assistant", Content: "agent result"},
+			},
+		},
+	}
+
+	plain, ok := chatMessagesForEvent(state, "ai:message")
+	if !ok || len(plain) != 1 || plain[0].Content != "plain chat" {
+		t.Fatalf("unexpected plain chat refresh: ok=%v messages=%#v", ok, plain)
+	}
+
+	agent, ok := chatMessagesForEvent(state, "agent:message")
+	if !ok || len(agent) != 2 || agent[0].Content != "inspect host" || agent[1].Content != "agent result" {
+		t.Fatalf("unexpected Agent refresh: ok=%v messages=%#v", ok, agent)
+	}
+
+	if messages, ok := chatMessagesForEvent(state, "agent:operate"); ok || messages != nil {
+		t.Fatalf("operation events must not replace chat history: ok=%v messages=%#v", ok, messages)
+	}
+}

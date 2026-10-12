@@ -161,6 +161,7 @@ type AIActivity = {
 };
 
 const AI_ACTIVITY_HISTORY_KEY = "eiksy.ai-operate-history";
+const AGENT_ACTIVITY_HISTORY_KEY = "eiksy.agent-operate-history";
 const MAX_AI_ACTIVITY_HISTORY = 20;
 
 type MasterPasswordDialogMode = "create" | "unlock";
@@ -320,6 +321,7 @@ class EiksyShell {
   private vaultDraftKeePassPassword = "";
   private notifications: NotificationItem[] = [];
   private aiActivities: AIActivity[] = [];
+  private agentActivities: AIActivity[] = [];
   private toastQueue: NotificationItem[] = [];
   private showSidebarActionsMenu = false;
 
@@ -394,6 +396,7 @@ class EiksyShell {
     this.renderStartupState("Starting Eiksy…");
     this.installStartupDiagnostics();
     this.loadAIActivityHistory();
+    this.loadAgentActivityHistory();
     this.registerGlobalEvents();
 
     try {
@@ -507,8 +510,7 @@ class EiksyShell {
     EventsOn("agent:message", () => {
       void this.refresh("");
     });
-    EventsOn("ai:operate", (...payload: unknown[]) => {
-      const data = payload[0] as Partial<AIActivity> | undefined;
+    const recordActivity = (data: Partial<AIActivity> | undefined, target: "ai" | "agent") => {
       if (!data) return;
       const activity: AIActivity = {
         id: crypto.randomUUID(),
@@ -525,16 +527,24 @@ class EiksyShell {
         message: String(data.message ?? ""),
         time: new Date().toISOString(),
       };
-      this.aiActivities = [...this.aiActivities.slice(-19), activity].map(
-        (entry) => ({
-          ...entry,
-          stdout: "",
-          stderr: "",
-        }),
-      );
-      this.persistAIActivityHistory();
+      const sanitized = (entries: AIActivity[]) => [...entries.slice(-19), activity].map((entry) => ({ ...entry, stdout: "", stderr: "" }));
+      if (target === "agent") {
+        this.agentActivities = sanitized(this.agentActivities);
+        this.persistAgentActivityHistory();
+      } else {
+        this.aiActivities = sanitized(this.aiActivities);
+        this.persistAIActivityHistory();
+      }
       this.render();
+    };
+    EventsOn("ai:operate", (...payload: unknown[]) => {
+      recordActivity(payload[0] as Partial<AIActivity> | undefined, "ai");
     });
+    EventsOn("agent:operate", (...payload: unknown[]) => {
+      recordActivity(payload[0] as Partial<AIActivity> | undefined, "agent");
+    });
+
+
   }
 
   private loadAIActivityHistory(): void {
@@ -569,6 +579,45 @@ class EiksyShell {
         }));
     } catch {
       this.aiActivities = [];
+    }
+  }
+
+  private loadAgentActivityHistory(): void {
+    try {
+      const raw = localStorage.getItem(AGENT_ACTIVITY_HISTORY_KEY);
+      if (!raw) { this.agentActivities = []; return; }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) { this.agentActivities = []; return; }
+      this.agentActivities = parsed
+        .filter((entry): entry is AIActivity => entry && typeof entry === "object")
+        .slice(-MAX_AI_ACTIVITY_HISTORY)
+        .map((entry) => ({
+          id: String(entry.id ?? crypto.randomUUID()),
+          status: String(entry.status ?? "unknown"),
+          sessionId: String(entry.sessionId ?? ""),
+          command: String(entry.command ?? ""),
+          approval: String(entry.approval ?? ""),
+          exitCode: Number(entry.exitCode ?? -1),
+          durationMs: Number(entry.durationMs ?? 0),
+          stdout: "", stderr: "",
+          errorType: String(entry.errorType ?? ""),
+          error: String(entry.error ?? ""),
+          message: String(entry.message ?? ""),
+          time: String(entry.time ?? new Date().toISOString()),
+        }));
+    } catch { this.agentActivities = []; }
+  }
+
+  private persistAgentActivityHistory(): void {
+    try {
+      const safeHistory = this.agentActivities.slice(-MAX_AI_ACTIVITY_HISTORY).map((entry) => ({
+        id: entry.id, status: entry.status, sessionId: entry.sessionId, command: entry.command,
+        approval: entry.approval, exitCode: entry.exitCode, durationMs: entry.durationMs,
+        errorType: entry.errorType, error: entry.error, message: entry.message, time: entry.time,
+      }));
+      localStorage.setItem(AGENT_ACTIVITY_HISTORY_KEY, JSON.stringify(safeHistory));
+    } catch {
+      // Local storage is optional; live activity remains available.
     }
   }
 

@@ -1699,8 +1699,6 @@ func (m Model) renderHelp(width, height int, title lipgloss.Style) string {
 	return panelFixed(b.String(), width, height)
 }
 
-// Config contains presentation/runtime options for the terminal UI.
-
 func chatMessagesForEvent(state appservice.ShellState, eventName string) ([]ChatMessage, bool) {
 	var source []domainai.ChatMessage
 	switch eventName {
@@ -1718,6 +1716,7 @@ func chatMessagesForEvent(state appservice.ShellState, eventName string) ([]Chat
 	return messages, true
 }
 
+// Config contains presentation/runtime options for the terminal UI.
 func Run(backend Backend) error {
 	model := NewModel().WithBackend(backend)
 	program := tea.NewProgram(model, tea.WithAltScreen())

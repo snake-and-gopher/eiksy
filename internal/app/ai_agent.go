@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	agentai "eiksy/internal/ai"
-	domainai "eiksy/internal/domain/ai"
 )
 
 // AIBackendAgent adapts Eiksy's existing AI application service to the
@@ -109,11 +108,3 @@ type errorString string
 
 func (e errorString) Error() string { return string(e) }
 
-func lastAssistantMessage(messages []domainai.ChatMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "assistant" {
-			return messages[i].Content
-		}
-	}
-	return ""
-}

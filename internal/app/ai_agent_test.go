@@ -182,3 +182,65 @@ func TestAIBackendAgentRunStreamsNativeToolLifecycle(t *testing.T) {
 		t.Fatalf("unexpected assistant events: %#v", got)
 	}
 }
+
+
+func TestAIBackendAgentRunDoesNotReplayPreviousReplyWhileApprovalIsPending(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"exec-1","type":"function","function":{"name":"ssh.exec","arguments":"{\\"sessionId\\":\\"session-1\\",\\"command\\":\\"uname -a\\",\\"reason\\":\\"inspect host\\"}"}}]}}]}`))
+	}))
+	defer server.Close()
+
+	store := memory.NewStore()
+	store.OpenRuntimeTab(workspace.Tab{ID: "session-1", ProtocolID: "ssh", Status: "connected"})
+	state := store.AIState()
+	state.ChatSessionID = "chat-approval"
+	state.AgentMessages = []domainai.ChatMessage{{Role: "assistant", Content: "stale previous answer"}}
+	state.Providers = []domainai.ProviderDescriptor{{
+		ID: "provider-1", Class: domainai.ProviderClassOpenAICompatible, Model: "test-model",
+		Endpoint: server.URL + "/v1", Selected: true, Configured: true,
+	}}
+	state.CommandPolicy = domainai.CommandPolicy{Tools: []domainai.CommandTool{{ID: nativeSSHExecPolicyToolID, Enabled: true}}}
+	if err := store.UpdateAIState(state); err != nil {
+		t.Fatalf("seed AI state: %v", err)
+	}
+
+	events, err := NewAIBackendAgent(NewService(store, &nativeTestSSHManager{}, nil)).Run(context.Background(), "session-1", "inspect host")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	var got []agentai.Event
+	for event := range events {
+		got = append(got, event)
+	}
+	approvalSeen := false
+	finishedSeen := false
+	for _, event := range got {
+		if event.Type == agentai.EventApprovalRequired {
+			approvalSeen = true
+		}
+		if event.Type == agentai.EventTextDelta && event.Content == "stale previous answer" {
+			t.Fatalf("replayed stale assistant reply while waiting for approval: %#v", got)
+		}
+		if event.Type == agentai.EventMessageFinished {
+			finishedSeen = true
+			if event.Content != "" {
+				t.Fatalf("expected empty completion while approval is pending, got %#v", event)
+			}
+		}
+	}
+	if !approvalSeen {
+		t.Fatalf("expected approval-required event, got %#v", got)
+	}
+	if !finishedSeen {
+		t.Fatalf("expected message-finished event after approval request, got %#v", got)
+	}
+	state = store.AIState()
+	if state.PendingNativeToolCall == nil || len(state.CommandPolicy.PendingRequests) != 1 {
+		t.Fatalf("expected approval continuation to remain pending, got %#v", state)
+	}
+	if len(state.AgentMessages) != 1 || state.AgentMessages[0].Content != "stale previous answer" {
+		t.Fatalf("approval request should not append a stale assistant reply: %#v", state.AgentMessages)
+	}
+}

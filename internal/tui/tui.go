@@ -1699,18 +1699,30 @@ func (m Model) renderHelp(width, height int, title lipgloss.Style) string {
 	return panelFixed(b.String(), width, height)
 }
 
+func chatMessagesForEvent(state appservice.ShellState, eventName string) ([]ChatMessage, bool) {
+	var source []domainai.ChatMessage
+	switch eventName {
+	case "ai:message":
+		source = state.AI.Messages
+	case "agent:message":
+		source = state.AI.AgentMessages
+	default:
+		return nil, false
+	}
+	messages := make([]ChatMessage, 0, len(source))
+	for _, message := range source {
+		messages = append(messages, ChatMessage{Role: message.Role, Content: message.Content})
+	}
+	return messages, true
+}
+
 // Config contains presentation/runtime options for the terminal UI.
 func Run(backend Backend) error {
 	model := NewModel().WithBackend(backend)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	if service, ok := backend.(*appservice.Service); ok {
 		service.SetRuntimeContext(context.Background(), func(eventName string, data ...interface{}) {
-			if eventName == "ai:message" {
-				state := service.GetShellState()
-				messages := make([]ChatMessage, 0, len(state.AI.Messages))
-				for _, message := range state.AI.Messages {
-					messages = append(messages, ChatMessage{Role: message.Role, Content: message.Content})
-				}
+			if messages, ok := chatMessagesForEvent(service.GetShellState(), eventName); ok {
 				program.Send(aiRefreshDone{messages: messages})
 				return
 			}

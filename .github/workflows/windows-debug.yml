@@ -73,6 +73,7 @@ jobs:
       - name: Upload GUI debug artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: eiksy-windows-amd64-gui-debug
           path: build/bin/eiksy-windows-amd64-debug.exe
           if-no-files-found: error
@@ -80,6 +81,7 @@ jobs:
       - name: Upload TUI debug artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: eiksy-windows-amd64-tui-debug
           path: debug-bin/eiksy-tui-windows-amd64-debug.exe
           if-no-files-found: error

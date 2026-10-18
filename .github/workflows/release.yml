@@ -105,6 +105,7 @@ jobs:
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: ${{ matrix.artifact }}
           path: build/bin/${{ matrix.artifact }}
           if-no-files-found: error
@@ -123,6 +124,7 @@ jobs:
       - name: Upload CLI release artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: eiksy-cli-${{ matrix.platform }}
           path: cli-bin/eiksy-cli-${{ matrix.platform }}*
           if-no-files-found: error

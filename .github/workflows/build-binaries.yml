@@ -78,6 +78,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: eiksy-linux-amd64
           path: |
             build/bin/eiksy-linux-amd64

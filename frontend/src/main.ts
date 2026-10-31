@@ -2411,9 +2411,9 @@ class EiksyShell {
   }
 
   private scrollChatToBottom(): void {
-    const messages = document.querySelector<HTMLDivElement>("#chat-messages");
-    if (messages) {
-      messages.scrollTop = messages.scrollHeight;
+    for (const selector of ["#chat-messages", "#agent-messages"]) {
+      const messages = document.querySelector<HTMLDivElement>(selector);
+      if (messages) messages.scrollTop = messages.scrollHeight;
     }
   }
 
@@ -3069,7 +3069,7 @@ class EiksyShell {
   }
 
   private renderAgentMessages(): string {
-    const timeline = this.agentTimelineInitialized
+    const timeline: AgentTimelineItem[] = this.agentTimelineInitialized
       ? this.agentTimeline
       : (this.shellState?.ai.agentMessages ?? []).map((message) => ({
           id: crypto.randomUUID(), kind: "message" as const, role: message.role, content: message.content,

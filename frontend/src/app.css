@@ -1630,3 +1630,35 @@ small {
 .agent-permission-command code { overflow-wrap: anywhere; white-space: pre-wrap; padding: 0.7rem; border-radius: 7px; background: rgba(0, 0, 0, 0.22); }
 .agent-permission-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.5rem; }
 .agent-permission-actions .danger { border-color: #a94b55; }
+
+
+/* Agent transcript follows the SSH terminal's visual language. */
+.agent-workspace { gap: 0.65rem; }
+.agent-terminal-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.55rem 0.8rem; border: 1px solid var(--border-card); border-radius: 8px; background: var(--bg-card); color: var(--color-muted); font-size: 0.78rem; }
+.agent-terminal-header > div { display: flex; align-items: center; gap: 0.55rem; color: var(--color-text); }
+.agent-terminal-indicator { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: #38b66b; box-shadow: 0 0 0 3px rgba(56,182,107,.14); }
+.agent-terminal-session { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.agent-terminal-transcript { display: flex; flex-direction: column; gap: 0.85rem; padding: 1rem; border: 1px solid var(--border-card); border-radius: 8px; background: #090d12; color: #d7e0e9; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.agent-transcript-message { max-width: 92%; padding: 0.75rem 0.9rem; border-radius: 8px; line-height: 1.55; overflow-wrap: anywhere; }
+.agent-transcript-user { align-self: flex-end; background: #17283a; border: 1px solid #29445f; color: #e2edf8; }
+.agent-transcript-assistant { align-self: flex-start; background: #111820; border: 1px solid #26323d; color: #d7e0e9; }
+.agent-transcript-label, .agent-terminal-stream-label { margin-bottom: 0.35rem; color: #8fa5b8; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.1em; }
+.agent-transcript-content { font-family: inherit; }
+.agent-transcript-content p:first-child { margin-top: 0; }
+.agent-transcript-content p:last-child { margin-bottom: 0; }
+.agent-terminal-operation { align-self: stretch; overflow: hidden; border: 1px solid #34414d; border-radius: 8px; background: #05080b; }
+.agent-terminal-operation-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.75rem; background: #151e27; color: #a9bac8; font-size: 0.72rem; }
+.agent-terminal-operation-header strong { color: #7fc6ff; letter-spacing: 0.08em; }
+.agent-terminal-command, .agent-terminal-stream pre { margin: 0; padding: 0.7rem 0.8rem; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #d9e6ef; font: inherit; font-size: 0.82rem; line-height: 1.5; }
+.agent-terminal-command { border-bottom: 1px solid #202b35; color: #f0f5f9; }
+.agent-terminal-command span { color: #65c98b; }
+.agent-terminal-stream { border-bottom: 1px solid #202b35; }
+.agent-terminal-stream-label { padding: 0.5rem 0.8rem 0; margin: 0; color: #72bd91; }
+.agent-terminal-stderr .agent-terminal-stream-label { color: #e59b9b; }
+.agent-terminal-stderr pre, .agent-terminal-error { color: #ffaaaa; }
+.agent-terminal-error, .agent-terminal-note { padding: 0.65rem 0.8rem; font-size: 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-terminal-note { color: #9fb0bf; border-top: 1px solid #202b35; }
+.agent-terminal-executed .agent-terminal-operation-header strong { color: #79d69a; }
+.agent-terminal-denied .agent-terminal-operation-header strong, .agent-terminal-failed .agent-terminal-operation-header strong { color: #ff9d9d; }
+.agent-workspace [data-agent-chat-form] { gap: 0.6rem; }
+.agent-workspace [data-agent-chat-form] .chat-textarea { font-family: inherit; }

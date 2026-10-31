@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"context"
 	"fmt"
 	"net/http"
@@ -24,6 +25,40 @@ import (
 	"eiksy/internal/storage/memory"
 )
 
+
+type lockedAISecretStore struct {
+	*memory.Store
+}
+
+func (s lockedAISecretStore) LoadSecret(string) (string, error) {
+	return "", securestorage.ErrMasterPasswordRequired
+}
+
+func TestActiveConfiguredProviderRequiresMasterPasswordWhenTokenIsLocked(t *testing.T) {
+	base := memory.NewStore()
+	service := NewService(base, nil, nil)
+	if err := service.SaveCloudProvider("model", "https://ai.example.test/v1", "saved-token"); err != nil {
+		t.Fatalf("save cloud provider: %v", err)
+	}
+
+	lockedService := NewService(lockedAISecretStore{Store: base}, nil, nil)
+	if _, err := lockedService.activeConfiguredProvider(base.AIState()); !errors.Is(err, securestorage.ErrMasterPasswordRequired) {
+		t.Fatalf("expected master password required error, got %v", err)
+	}
+}
+
+func TestProviderByIDRequiresMasterPasswordWhenTokenIsLocked(t *testing.T) {
+	base := memory.NewStore()
+	service := NewService(base, nil, nil)
+	if err := service.SaveCloudProvider("model", "https://ai.example.test/v1", "saved-token"); err != nil {
+		t.Fatalf("save cloud provider: %v", err)
+	}
+
+	lockedService := NewService(lockedAISecretStore{Store: base}, nil, nil)
+	if _, err := lockedService.providerByID(base.AIState(), "openai-compatible-cloud"); !errors.Is(err, securestorage.ErrMasterPasswordRequired) {
+		t.Fatalf("expected master password required error, got %v", err)
+	}
+}
 
 func TestConnectSSHMarksSessionErrorWhenCredentialsCannotBeLoaded(t *testing.T) {
 	store := memory.NewStore()

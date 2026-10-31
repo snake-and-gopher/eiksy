@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -565,7 +564,7 @@ func (s *Service) providerByID(state ai.WorkspaceState, providerID string) (*ai.
 		provider := state.Providers[i]
 		if provider.Class == ai.ProviderClassOpenAICompatible {
 			token, err := s.store.LoadSecret(securestorage.AIProviderTokenKey(provider.ID))
-			if err != nil && !errors.Is(err, securestorage.ErrMasterPasswordRequired) {
+			if err != nil {
 				return nil, err
 			}
 			provider.Token = strings.TrimSpace(token)

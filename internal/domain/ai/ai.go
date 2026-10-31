@@ -53,6 +53,7 @@ type CommandTool struct {
 }
 
 type CommandRule struct {
+	Target      string                  `json:"target,omitempty"`
 	ToolID      string                  `json:"toolId,omitempty"`
 	SessionID   string                  `json:"sessionId,omitempty"`
 	Pattern     string                  `json:"pattern"`
@@ -61,6 +62,7 @@ type CommandRule struct {
 }
 
 type CommandRequest struct {
+	Target      string `json:"target,omitempty"`
 	ID          string `json:"id"`
 	ToolID      string `json:"toolId"`
 	SessionID   string `json:"sessionId"`
@@ -70,6 +72,7 @@ type CommandRequest struct {
 }
 
 type PendingNativeToolCall struct {
+	Target        string `json:"target,omitempty"`
 	RequestID     string `json:"requestId"`
 	ProviderID    string `json:"providerId"`
 	ToolCallID    string `json:"toolCallId"`

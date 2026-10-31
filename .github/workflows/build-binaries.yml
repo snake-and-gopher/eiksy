@@ -76,6 +76,7 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.releaseVersion=$RELEASE_VERSION" -o cli-bin/eiksy-cli-linux-amd64 ./cmd/eiksy-cli
 
       - name: Upload workflow artifacts
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           retention-days: 1

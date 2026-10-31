@@ -67,6 +67,12 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 	}
 	switch mode { case ai.CommandPermissionModeAlways, ai.CommandPermissionModeSession, ai.CommandPermissionModeNow: default: return fmt.Errorf("unsupported permission mode %q", mode) }
 	if request.ToolID != nativeSFTPWriteToolName && !commandToolEnabled(policy, request.ToolID) { return fmt.Errorf("tool %q is disabled in command policy", request.ToolID) }
+	if normalizeCommandTarget(request.Target) == commandTargetLocal {
+		return fmt.Errorf("local approval execution is not available in this runtime")
+	}
+	if normalizeCommandTarget(request.Target) != commandTargetSSH {
+		return fmt.Errorf("unsupported command execution target %q", request.Target)
+	}
 	if _, ok := s.runtimeTab(request.SessionID); !ok {
 		removePending(); state.CommandPolicy = policy
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist stale command request cleanup: %w", err) }
@@ -122,9 +128,9 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 	if request.ToolID != nativeSFTPWriteToolName {
 		switch mode {
 		case ai.CommandPermissionModeAlways:
-			policy.CommandRules = append(policy.CommandRules, ai.CommandRule{ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact command"})
+			policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target: normalizeCommandTarget(request.Target), ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact command"})
 		case ai.CommandPermissionModeSession:
-			policy.CommandRules = append(policy.CommandRules, ai.CommandRule{ToolID:request.ToolID,SessionID:request.SessionID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: allow this exact command for this session"})
+			policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target: normalizeCommandTarget(request.Target), ToolID:request.ToolID,SessionID:request.SessionID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: allow this exact command for this session"})
 		}
 	}
 	policy.CommandRules = normalizeCommandRules(policy.CommandRules); state.CommandPolicy = policy
@@ -198,6 +204,7 @@ func normalizeCommandPolicy(policy ai.CommandPolicy) ai.CommandPolicy {
 			continue
 		}
 		filteredRequests = append(filteredRequests, ai.CommandRequest{
+			Target: normalizeCommandTarget(request.Target),
 			ID:          strings.TrimSpace(request.ID),
 			ToolID:      toolID,
 			SessionID:   strings.TrimSpace(request.SessionID),

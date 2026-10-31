@@ -1461,11 +1461,19 @@ class EiksyShell {
           this.resolvingAgentApprovalID = requestID;
           this.render();
           try {
-            await this.runAction(
+            const resolved = await this.withMasterPasswordRetry(
               async () => ResolveCommandPolicyRequest(requestID, mode),
-              "Unable to resolve command request",
+              "Unable to resolve command request: master password setup was cancelled.",
             );
+            if (typeof resolved === "undefined") return;
+
+            // Keep the resolved request dismissed even if a refresh races with
+            // agent events and briefly returns a stale pending-request snapshot.
+            this.dismissedAgentApprovalID = requestID;
             await this.refresh("");
+          } catch (error) {
+            this.setErrorMessage(formatError("Unable to resolve command request", error));
+            this.render();
           } finally {
             this.resolvingAgentApprovalID = "";
             this.render();

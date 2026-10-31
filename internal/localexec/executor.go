@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,16 +120,14 @@ func (e *Executor) ReadFile(path string) (string, error) {
 	}
 	defer file.Close()
 
-	var buffer bytes.Buffer
-	limited := make([]byte, e.maxReadBytes+1)
-	n, readErr := file.Read(limited)
-	if readErr != nil && n == 0 {
+	content, readErr := io.ReadAll(io.LimitReader(file, int64(e.maxReadBytes+1)))
+	if readErr != nil {
 		return "", fmt.Errorf("read local file: %w", readErr)
 	}
-	if n > e.maxReadBytes {
-		return string(limited[:e.maxReadBytes]) + "\n[content truncated]", nil
+	if len(content) > e.maxReadBytes {
+		return string(content[:e.maxReadBytes]) + "\n[content truncated]", nil
 	}
-	return string(limited[:n]), nil
+	return string(content), nil
 }
 
 func (e *Executor) WriteFile(path, content string) error {

@@ -3795,7 +3795,9 @@ class EiksyShell {
   }
 
   private setErrorMessage(message: string): void {
-    this.errorMessage = message;
+    // Runtime errors are presented through notifications only. Keep the
+    // startup error state separate so it can still render the startup screen.
+    this.errorMessage = "";
     if (message.trim()) {
       this.pushNotification("error", message);
     }

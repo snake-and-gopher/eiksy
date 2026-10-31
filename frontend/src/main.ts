@@ -160,6 +160,14 @@ type AIActivity = {
   time: string;
 };
 
+type AgentTimelineItem = {
+  id: string;
+  kind: "message" | "operation";
+  role?: string;
+  content?: string;
+  activity?: AIActivity;
+};
+
 const AI_ACTIVITY_HISTORY_KEY = "eiksy.ai-operate-history";
 const AGENT_ACTIVITY_HISTORY_KEY = "eiksy.agent-operate-history";
 const MAX_AI_ACTIVITY_HISTORY = 20;
@@ -322,6 +330,8 @@ class EiksyShell {
   private notifications: NotificationItem[] = [];
   private aiActivities: AIActivity[] = [];
   private agentActivities: AIActivity[] = [];
+  private agentTimeline: AgentTimelineItem[] = [];
+  private agentTimelineInitialized = false;
   private toastQueue: NotificationItem[] = [];
   private showSidebarActionsMenu = false;
 
@@ -507,7 +517,17 @@ class EiksyShell {
       this.agentStatus = data?.status === "thinking" ? "thinking" : "idle";
       this.render();
     });
-    EventsOn("agent:message", () => {
+    EventsOn("agent:message", (...payload: unknown[]) => {
+      const data = payload[0] as { role?: string; content?: string } | undefined;
+      if (data?.content?.trim()) {
+        this.ensureAgentTimeline();
+        this.agentTimeline.push({
+          id: crypto.randomUUID(),
+          kind: "message",
+          role: data.role === "user" ? "user" : "assistant",
+          content: data.content,
+        });
+      }
       void this.refresh("");
     });
     const recordActivity = (data: Partial<AIActivity> | undefined, target: "ai" | "agent") => {
@@ -527,12 +547,14 @@ class EiksyShell {
         message: String(data.message ?? ""),
         time: new Date().toISOString(),
       };
-      const sanitized = (entries: AIActivity[]) => [...entries.slice(-19), activity].map((entry) => ({ ...entry, stdout: "", stderr: "" }));
+      const nextEntries = [...(target === "agent" ? this.agentActivities : this.aiActivities).slice(-19), activity];
       if (target === "agent") {
-        this.agentActivities = sanitized(this.agentActivities);
+        this.agentActivities = nextEntries;
+        this.ensureAgentTimeline();
+        this.agentTimeline.push({ id: activity.id, kind: "operation", activity });
         this.persistAgentActivityHistory();
       } else {
-        this.aiActivities = sanitized(this.aiActivities);
+        this.aiActivities = nextEntries;
         this.persistAIActivityHistory();
       }
       this.render();
@@ -1373,6 +1395,8 @@ class EiksyShell {
       this.agentDraftMessage = input?.value ?? "";
       const message = this.agentDraftMessage.trim();
       if (!message || !this.agentBoundSessionID || this.agentStatus === "thinking") return;
+      this.ensureAgentTimeline();
+      this.agentTimeline.push({ id: crypto.randomUUID(), kind: "message", role: "user", content: message });
       this.agentStatus = "thinking";
       this.render();
       try {
@@ -3012,6 +3036,17 @@ class EiksyShell {
         `;
   }
 
+  private ensureAgentTimeline(): void {
+    if (this.agentTimelineInitialized) return;
+    this.agentTimelineInitialized = true;
+    this.agentTimeline = (this.shellState?.ai.agentMessages ?? []).map((message) => ({
+      id: crypto.randomUUID(),
+      kind: "message",
+      role: message.role,
+      content: message.content,
+    }));
+  }
+
   private renderAgentWorkspace(): string {
     if (!this.hasConfiguredProvider()) {
       return '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
@@ -3020,7 +3055,11 @@ class EiksyShell {
       return '<div class="empty-state">Open a session to use Agent.</div>';
     }
     return `
-      <div class="agent-messages chat-messages" id="agent-messages">${this.renderAgentMessages()}</div>
+      <div class="agent-terminal-header">
+        <div><span class="agent-terminal-indicator"></span><strong>Agent session</strong></div>
+        <span class="agent-terminal-session">${escapeHtml(this.agentBoundSessionID)}</span>
+      </div>
+      <div class="agent-messages agent-terminal-transcript" id="agent-messages">${this.renderAgentMessages()}</div>
       <form class="chat-input-form" data-agent-chat-form>
         ${this.agentStatus === "thinking" ? '<div class="ai-status-indicator">⏳ Agent is working…</div>' : ""}
         <textarea class="chat-textarea" name="agentMessage" placeholder="Ask Agent…" aria-label="Agent message" rows="3">${escapeHtml(this.agentDraftMessage)}</textarea>
@@ -3030,10 +3069,41 @@ class EiksyShell {
   }
 
   private renderAgentMessages(): string {
-    const messages = (this.shellState?.ai.agentMessages ?? []).map((message) => `
-      <div class="message ${escapeClassName(message.role)}">${message.role === "assistant" ? renderMarkdown(message.content) : escapeHtml(message.content)}</div>
-    `).join("");
-    return messages || '<div class="empty-state">Agent conversation will appear here.</div>';
+    const timeline = this.agentTimelineInitialized
+      ? this.agentTimeline
+      : (this.shellState?.ai.agentMessages ?? []).map((message) => ({
+          id: crypto.randomUUID(), kind: "message" as const, role: message.role, content: message.content,
+        }));
+    const entries = timeline.map((item) => {
+      if (item.kind === "message") {
+        const role = item.role === "user" ? "user" : "assistant";
+        const label = role === "user" ? "YOU" : "AGENT";
+        const content = role === "assistant"
+          ? renderMarkdown(item.content ?? "")
+          : escapeHtml(item.content ?? "");
+        return `<article class="agent-transcript-message agent-transcript-${role}"><div class="agent-transcript-label">${label}</div><div class="agent-transcript-content">${content}</div></article>`;
+      }
+      const activity = item.activity;
+      if (!activity) return "";
+      const status = escapeHtml(activity.status.replaceAll("_", " "));
+      const details = [
+        activity.exitCode >= 0 ? `exit ${activity.exitCode}` : "",
+        activity.durationMs > 0 ? `${activity.durationMs} ms` : "",
+        activity.errorType,
+      ].filter(Boolean).map(escapeHtml).join(" · ");
+      const stdout = activity.stdout
+        ? `<div class="agent-terminal-stream"><div class="agent-terminal-stream-label">STDOUT</div><pre>${escapeHtml(activity.stdout)}</pre></div>` : "";
+      const stderr = activity.stderr
+        ? `<div class="agent-terminal-stream agent-terminal-stderr"><div class="agent-terminal-stream-label">STDERR</div><pre>${escapeHtml(activity.stderr)}</pre></div>` : "";
+      return `<article class="agent-terminal-operation agent-terminal-${escapeClassName(activity.status)}">
+        <div class="agent-terminal-operation-header"><strong>SSH EXEC</strong><span>${status}${details ? ` · ${details}` : ""}</span></div>
+        ${activity.command ? `<pre class="agent-terminal-command"><span>$ </span>${escapeHtml(activity.command)}</pre>` : ""}
+        ${stdout}${stderr}
+        ${activity.error ? `<div class="agent-terminal-error">${escapeHtml(activity.error)}</div>` : ""}
+        ${activity.message ? `<div class="agent-terminal-note">${escapeHtml(activity.message)}</div>` : ""}
+      </article>`;
+    }).join("");
+    return entries || '<div class="empty-state">Agent conversation will appear here.</div>';
   }
 
   private renderMessages(): string {

@@ -1584,6 +1584,7 @@ small {
   backdrop-filter: blur(5px);
 }
 .agent-permission-dialog {
+  position: relative;
   width: min(34rem, 100%);
   max-height: min(85vh, 48rem);
   overflow: auto;
@@ -1593,6 +1594,33 @@ small {
   background: var(--panel-bg, #111923);
   color: var(--text-color, #edf3fa);
   box-shadow: 0 24px 90px rgba(0, 0, 0, 0.55);
+}
+
+.agent-permission-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border-color, rgba(130, 160, 190, 0.35));
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-color, #a8b5c4);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.agent-permission-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-color, #edf3fa);
+}
+.agent-permission-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .agent-permission-eyebrow { color: var(--accent-color, #6eb8ff); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; }
 .agent-permission-dialog h2 { margin: 0.55rem 0 0.5rem; }

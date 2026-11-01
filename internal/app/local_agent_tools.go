@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	agentai "eiksy/internal/ai"
 	"eiksy/internal/domain/ai"
 	"eiksy/internal/domain/sessions"
 	"eiksy/internal/localexec"
@@ -166,7 +165,7 @@ func (s *Service) executeLocalTool(ctx context.Context, toolName string, args st
 		result.Success = false
 		result.ExitCode = -1
 		result.Error = err.Error()
-		result.ErrorType = "local_execution_error"
+		result.ErrorType = sessions.CommandExecutionErrorInternal
 	} else if !result.Success {
 		status = "execution_failed"
 	}
@@ -234,4 +233,3 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, string(encoded))
 }
 
-var _ agentai.EventType

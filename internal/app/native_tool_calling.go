@@ -150,7 +150,11 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 }
 
 func (s *Service) nativeMessagesFromState(state ai.WorkspaceState, activeSessionID string) []nativeChatMessage {
-	messages := []nativeChatMessage{{Role: "system", Content: s.nativeToolSystemPrompt(state.CommandPolicy, activeSessionID)}}
+	return s.nativeMessagesFromStateForTarget(state, commandTargetSSH, activeSessionID)
+}
+
+func (s *Service) nativeMessagesFromStateForTarget(state ai.WorkspaceState, target, activeSessionID string) []nativeChatMessage {
+	messages := []nativeChatMessage{{Role: "system", Content: s.nativeToolSystemPromptForTarget(state.CommandPolicy, target, activeSessionID)}}
 	for _, message := range state.AgentMessages {
 		messages = append(messages, nativeChatMessage{Role: message.Role, Content: message.Content})
 	}

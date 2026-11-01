@@ -75,7 +75,7 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 	decision, policyReason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, toolID, "", command)
 	switch decision {
 	case commandPolicyDecisionDeny:
-		s.recordCommandAudit(providerID, "", command, string(decision), "denied", "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied", Error:policyReason})
+		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "denied", "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied", Error:policyReason})
 		s.emitNativeOperation("denied", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "not_required", policyReason)
 		return marshalNativeToolError("local operation denied by Command Policy: %s", policyReason), false, nil
 	case commandPolicyDecisionAsk:
@@ -98,12 +98,12 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 			UserMessage:userMessage, MessagesJSON:string(encodedMessages),
 		}
 		if err := s.store.UpdateAIState(state); err != nil { return "", false, fmt.Errorf("persist pending local tool call: %w", err) }
-		s.recordCommandAudit(providerID, "", command, string(decision), "required", "approval_required", -1, 0, ai.CommandAuditEvent{ErrorType:"approval_required"})
+		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "required", "approval_required", -1, 0, ai.CommandAuditEvent{ErrorType:"approval_required"})
 		s.emitNativeOperation("approval_required", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "required", policyReason)
 		return fmt.Sprintf(`{"status":"approval_required","requestId":%q}`, request.ID), true, nil
 	case commandPolicyDecisionAllow:
 		result, status, err := s.executeLocalTool(ctx, call.Function.Name, args)
-		s.recordCommandAudit(providerID, "", command, string(decision), "not_required", status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType), Error:result.Error})
+		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "not_required", status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType), Error:result.Error})
 		s.emitNativeOperation(status, "", call.Function.Name+" "+command, result, "not_required", errString(err))
 		payload := map[string]any{"status":status,"target":commandTargetLocal,"operation":call.Function.Name,"path":args.Path,"command":args.Command,"result":result}
 		if err != nil { payload["message"] = err.Error() }
@@ -157,7 +157,7 @@ func (s *Service) executeLocalTool(ctx context.Context, toolName string, args st
 			if info, statErr := entry.Info(); statErr == nil { item["size"] = info.Size(); item["modTime"] = info.ModTime() }
 			items = append(items, item)
 		}
-		payload = map[string]any{"entries":items,"count":len(items)}
+		payload = map[string]any{"entries":items,"count":len(items),"truncated":len(entries) == 256}
 	default:
 		err = fmt.Errorf("unsupported local tool %q", toolName)
 	}
@@ -234,7 +234,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	if pendingCommand == "" { pendingCommand = strings.TrimSpace(args.Path) }
 	if pendingCommand != request.Command { return fmt.Errorf("pending local tool arguments no longer match the approved operation") }
 	result, status, executeErr := s.executeLocalTool(s.resolveContext(context.Background()), pending.ToolName, args)
-	s.recordCommandAudit(pending.ProviderID, "", request.Command, string(decision), string(mode), status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType),Error:result.Error})
+	s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(decision), string(mode), status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType),Error:result.Error})
 	s.emitNativeOperation(status, "", pending.ToolName+" "+request.Command, result, string(mode), errString(executeErr))
 	payload := map[string]any{"status":status,"target":commandTargetLocal,"operation":pending.ToolName,"command":request.Command,"result":result}
 	if executeErr != nil { payload["message"] = executeErr.Error() }

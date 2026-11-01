@@ -119,3 +119,45 @@ func TestEvaluateCommandPolicyRejectsSecretExpansion(t *testing.T) {
 		}
 	}
 }
+
+
+func TestEvaluateCommandPolicySeparatesLocalAndSSHTargets(t *testing.T) {
+	policy := ai.CommandPolicy{
+		Tools: []ai.CommandTool{{ID: "shell", Enabled: true}},
+		CommandRules: []ai.CommandRule{
+			{Target: commandTargetSSH, ToolID: "shell", Pattern: "pwd", Action: ai.CommandPermissionAllow},
+			{Target: commandTargetLocal, ToolID: "shell", Pattern: "pwd", Action: ai.CommandPermissionAsk},
+		},
+	}
+	if got, _ := evaluateCommandPolicyForTarget(policy, commandTargetSSH, "shell", "session-1", "pwd"); got != commandPolicyDecisionAllow {
+		t.Fatalf("SSH target decision = %q, want allow", got)
+	}
+	if got, _ := evaluateCommandPolicyForTarget(policy, commandTargetLocal, "shell", "", "pwd"); got != commandPolicyDecisionAsk {
+		t.Fatalf("local target decision = %q, want ask", got)
+	}
+}
+
+func TestEvaluateCommandPolicyTargetSpecificDenyCannotBeOverriddenByOtherTarget(t *testing.T) {
+	policy := ai.CommandPolicy{
+		Tools: []ai.CommandTool{{ID: "shell", Enabled: true}},
+		CommandRules: []ai.CommandRule{
+			{Target: commandTargetSSH, ToolID: "shell", Pattern: "rm *", Action: ai.CommandPermissionDeny},
+			{Target: commandTargetLocal, ToolID: "shell", Pattern: "rm *", Action: ai.CommandPermissionAsk},
+		},
+	}
+	if got, _ := evaluateCommandPolicyForTarget(policy, commandTargetLocal, "shell", "", "rm -rf tmp"); got != commandPolicyDecisionAsk {
+		t.Fatalf("local target decision = %q, want ask", got)
+	}
+	if got, _ := evaluateCommandPolicyForTarget(policy, commandTargetSSH, "shell", "session-1", "rm -rf tmp"); got != commandPolicyDecisionDeny {
+		t.Fatalf("SSH target decision = %q, want deny", got)
+	}
+}
+
+func TestNormalizeCommandTargetDefaultsToSSH(t *testing.T) {
+	if got := normalizeCommandTarget(""); got != commandTargetSSH {
+		t.Fatalf("empty target = %q, want %q", got, commandTargetSSH)
+	}
+	if got := normalizeCommandTarget(" LOCAL "); got != commandTargetLocal {
+		t.Fatalf("normalized target = %q, want %q", got, commandTargetLocal)
+	}
+}

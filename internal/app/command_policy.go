@@ -72,7 +72,7 @@ func normalizeCommandRules(rules []ai.CommandRule) []ai.CommandRule {
 			continue
 		}
 		result = append(result, ai.CommandRule{
-			ToolID: strings.ToLower(strings.TrimSpace(rule.ToolID)), SessionID: strings.TrimSpace(rule.SessionID),
+			Target: normalizeCommandTarget(rule.Target), ToolID: strings.ToLower(strings.TrimSpace(rule.ToolID)), SessionID: strings.TrimSpace(rule.SessionID),
 			Pattern: pattern, Action: action, Description: strings.TrimSpace(rule.Description),
 		})
 	}
@@ -111,6 +111,7 @@ func containsUnsafeShellSyntax(command string) bool {
 
 func commandRuleSpecificity(rule ai.CommandRule) int {
 	score := 0
+	if rule.Target != "" { score += 4 }
 	if rule.SessionID != "" {
 		score += 4
 	}
@@ -126,6 +127,22 @@ func commandRuleSpecificity(rule ai.CommandRule) int {
 }
 
 func evaluateCommandPolicy(policy ai.CommandPolicy, toolID, sessionID, command string) (commandPolicyDecision, string) {
+	return evaluateCommandPolicyForTarget(policy, commandTargetSSH, toolID, sessionID, command)
+}
+
+const (
+	commandTargetSSH = "ssh"
+	commandTargetLocal = "local"
+)
+
+func normalizeCommandTarget(target string) string {
+	target = strings.ToLower(strings.TrimSpace(target))
+	if target == "" { return commandTargetSSH }
+	return target
+}
+
+func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, sessionID, command string) (commandPolicyDecision, string) {
+	target = normalizeCommandTarget(target)
 	toolID = strings.ToLower(strings.TrimSpace(toolID))
 	sessionID = strings.TrimSpace(sessionID)
 	command = strings.TrimSpace(command)
@@ -148,6 +165,9 @@ func evaluateCommandPolicy(policy ai.CommandPolicy, toolID, sessionID, command s
 	bestDecision := commandPolicyDecisionAsk
 	bestReason := "no command rule matched"
 	for _, rule := range rules {
+		if rule.Target != "" && rule.Target != target {
+			continue
+		}
 		if rule.ToolID != "" && rule.ToolID != toolID {
 			continue
 		}

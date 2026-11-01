@@ -193,6 +193,10 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	if !commandToolEnabled(policy, request.ToolID) {
 		return fmt.Errorf("tool %q is disabled in command policy", request.ToolID)
 	}
+	// Resolve the provider (including its protected token) before executing the
+	// approved operation. If secure storage is locked, the caller must unlock it
+	// and retry; never execute and only then discover continuation cannot resume.
+	if _, err := s.providerByID(state, pending.ProviderID); err != nil { return err }
 
 	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", request.Command)
 	if decision == commandPolicyDecisionDeny {

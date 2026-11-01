@@ -152,7 +152,10 @@ func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, ses
 	if !commandToolEnabled(policy, toolID) {
 		return commandPolicyDecisionDeny, fmt.Sprintf("tool %q is disabled", toolID)
 	}
-	if (toolID == "shell" || toolID == nativeLocalShellPolicyToolID) && containsUnsafeShellSyntax(command) {
+	if toolID == "shell" && containsUnsafeShellSyntax(command) {
+		return commandPolicyDecisionDeny, "shell operators, expansion and command substitution are not permitted by Command Policy"
+	}
+	if toolID == nativeLocalShellPolicyToolID && containsUnsafeLocalShellSyntax(command) {
 		return commandPolicyDecisionDeny, "shell operators, expansion and command substitution are not permitted by Command Policy"
 	}
 	if target == commandTargetLocal && toolID == nativeLocalShellPolicyToolID && isPrivilegeEscalationCommand(command) {
@@ -195,6 +198,13 @@ func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, ses
 		bestReason = rule.Description
 	}
 	return bestDecision, bestReason
+}
+
+func containsUnsafeLocalShellSyntax(command string) bool {
+	for _, token := range []string{";", "&&", "||", "&", "|", ">", "<", "`", "$", "^", "%", "!", "\n", "\r"} {
+		if strings.Contains(command, token) { return true }
+	}
+	return false
 }
 
 func isPrivilegeEscalationCommand(command string) bool {

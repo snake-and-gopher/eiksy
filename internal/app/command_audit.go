@@ -37,13 +37,18 @@ var sensitiveCommandPatterns = []struct {
 }
 
 func (s *Service) recordCommandAudit(providerID, sessionID, command, policyDecision, approval, result string, exitCode int, durationMs int64, extra ai.CommandAuditEvent) {
+	s.recordCommandAuditForTarget(commandTargetSSH, nativeSSHExecPolicyToolID, providerID, sessionID, command, policyDecision, approval, result, exitCode, durationMs, extra)
+}
+
+func (s *Service) recordCommandAuditForTarget(target, toolID, providerID, sessionID, command, policyDecision, approval, result string, exitCode int, durationMs int64, extra ai.CommandAuditEvent) {
 	if s == nil { return }
 	event := ai.CommandAuditEvent{
 		ID: "audit-cmd-" + time.Now().UTC().Format("20060102T150405.000000000Z"),
 		At: time.Now().UTC().Format(time.RFC3339Nano),
 		ChatSessionID: redactAuditValue(s.store.AIState().ChatSessionID),
 		ProviderID: redactAuditValue(providerID),
-		ToolID: nativeSSHExecPolicyToolID,
+		Target: redactAuditValue(target),
+		ToolID: redactAuditValue(toolID),
 		SessionID: redactAuditValue(sessionID),
 		Command: redactAuditValue(command),
 		PolicyDecision: redactAuditValue(policyDecision),

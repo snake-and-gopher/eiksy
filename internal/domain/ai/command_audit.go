@@ -7,6 +7,7 @@ type CommandAuditEvent struct {
 	At             string `json:"at"`
 	ChatSessionID  string `json:"chatSessionId,omitempty"`
 	ProviderID     string `json:"providerId,omitempty"`
+	Target         string `json:"target,omitempty"`
 	ToolID         string `json:"toolId"`
 	SessionID      string `json:"sessionId"`
 	Command        string `json:"command"`

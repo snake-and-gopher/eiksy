@@ -153,7 +153,7 @@ func NewService(store stateStore, sshManager sshManager, sftpManager sftpManager
 func NewLocalAgentService(store stateStore) (*Service, error) {
 	executor, err := localexec.New()
 	if err != nil { return nil, err }
-	return &Service{store: store, emitFn: func(string, ...interface{}) {}, localExecutor: executor}, nil
+	return &Service{store: store, httpClient: &http.Client{Timeout: 120 * time.Second}, emitFn: func(string, ...interface{}) {}, localExecutor: executor}, nil
 }
 
 // NewTUIService creates the application service with only the dependencies

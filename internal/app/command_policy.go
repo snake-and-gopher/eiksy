@@ -155,6 +155,9 @@ func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, ses
 	if (toolID == "shell" || toolID == nativeLocalShellPolicyToolID) && containsUnsafeShellSyntax(command) {
 		return commandPolicyDecisionDeny, "shell operators, expansion and command substitution are not permitted by Command Policy"
 	}
+	if target == commandTargetLocal && toolID == nativeLocalShellPolicyToolID && isPrivilegeEscalationCommand(command) {
+		return commandPolicyDecisionDeny, "privilege escalation is prohibited for the local agent"
+	}
 
 	rules := normalizeCommandRules(policy.CommandRules)
 	if len(rules) == 0 {
@@ -192,4 +195,17 @@ func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, ses
 		bestReason = rule.Description
 	}
 	return bestDecision, bestReason
+}
+
+func isPrivilegeEscalationCommand(command string) bool {
+	lower := strings.ToLower(strings.TrimSpace(command))
+	if strings.Contains(lower, "-verb runas") || strings.Contains(lower, "start-process") && strings.Contains(lower, "runas") { return true }
+	for _, token := range strings.Fields(lower) {
+		token = strings.Trim(token, "\"'")
+		if index := strings.LastIndexAny(token, "/\\"); index >= 0 { token = token[index+1:] }
+		switch token {
+		case "sudo", "doas", "su", "runas", "runas.exe", "pkexec": return true
+		}
+	}
+	return false
 }

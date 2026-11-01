@@ -165,8 +165,6 @@ func normalizeCommandPolicy(policy ai.CommandPolicy) ai.CommandPolicy {
 		{ID: "shell", Name: "Shell command", Description: "Run command in active SSH session", Enabled: true},
 		{ID: "sftp", Name: "SFTP operations", Description: "Browse and edit files over SFTP", Enabled: true},
 		{ID: "search", Name: "Search", Description: "Run grep/find-like queries on host", Enabled: true},
-		{ID: "local-shell", Name: "Local shell command", Description: "Run a command on the local host", Enabled: true},
-		{ID: "local-files", Name: "Local file operations", Description: "Read, write and list local files", Enabled: true},
 	}
 	toolByID := make(map[string]ai.CommandTool, len(defaults))
 	order := make([]string, 0, len(defaults))
@@ -234,6 +232,9 @@ func commandToolEnabled(policy ai.CommandPolicy, toolID string) bool {
 			return tool.Enabled
 		}
 	}
+	// Local-only capabilities default to enabled without surfacing new tools in
+	// the desktop SSH policy UI. A persisted explicit entry can still disable them.
+	if toolID == nativeLocalShellPolicyToolID || toolID == nativeLocalFilesPolicyToolID { return true }
 	return false
 }
 

@@ -132,18 +132,20 @@ func (s *Service) executeLocalTool(ctx context.Context, toolName string, args st
 		result.Stdout, result.Stderr, result.ExitCode = localResult.Stdout, localResult.Stderr, localResult.ExitCode
 		result.DurationMs = localResult.Duration.Milliseconds()
 		result.Success = err == nil && localResult.ExitCode == 0
-		payload = map[string]any{"stdout":localResult.Stdout,"stderr":localResult.Stderr,"exitCode":localResult.ExitCode,"truncated":localResult.Truncated}
+		payload = nil
 	case nativeLocalFileReadToolName:
 		var content string
 		content, err = s.localExecutor.ReadFile(args.Path)
 		result.DurationMs = time.Since(started).Milliseconds()
 		result.Success = err == nil
-		payload = map[string]any{"content":content}
+		result.Stdout = content
+		payload = nil
 	case nativeLocalFileWriteToolName:
 		err = s.localExecutor.WriteFile(args.Path, args.Content)
 		result.DurationMs = time.Since(started).Milliseconds()
 		result.Success = err == nil
-		payload = map[string]any{"bytes":len([]byte(args.Content))}
+		result.Stdout = fmt.Sprintf("written %d bytes", len([]byte(args.Content)))
+		payload = nil
 	case nativeLocalFileListToolName:
 		var entries []os.DirEntry
 		entries, err = s.localExecutor.ListDirectory(args.Path)
@@ -169,9 +171,7 @@ func (s *Service) executeLocalTool(ctx context.Context, toolName string, args st
 	} else if !result.Success {
 		status = "execution_failed"
 	}
-	if encoded, marshalErr := json.Marshal(payload); marshalErr == nil {
-		result.Stdout = string(encoded)
-	}
+	if payload != nil { if encoded, marshalErr := json.Marshal(payload); marshalErr == nil { result.Stdout = string(encoded) } }
 	if result.DurationMs == 0 { result.DurationMs = time.Since(started).Milliseconds() }
 	return result, status, err
 }

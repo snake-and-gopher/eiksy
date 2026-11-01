@@ -152,7 +152,7 @@ func evaluateCommandPolicyForTarget(policy ai.CommandPolicy, target, toolID, ses
 	if !commandToolEnabled(policy, toolID) {
 		return commandPolicyDecisionDeny, fmt.Sprintf("tool %q is disabled", toolID)
 	}
-	if toolID == "shell" && containsUnsafeShellSyntax(command) {
+	if (toolID == "shell" || toolID == nativeLocalShellPolicyToolID) && containsUnsafeShellSyntax(command) {
 		return commandPolicyDecisionDeny, "shell operators, expansion and command substitution are not permitted by Command Policy"
 	}
 

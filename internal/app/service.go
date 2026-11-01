@@ -16,6 +16,7 @@ import (
 	sftpdomain "eiksy/internal/domain/sftp"
 	"eiksy/internal/domain/workspace"
 	"eiksy/internal/securestorage"
+	"eiksy/internal/localexec"
 	sshmanager "eiksy/internal/ssh"
 	sftpmanager "eiksy/internal/sftp"
 )
@@ -77,6 +78,7 @@ type Service struct {
 	localAIDone     chan error
 	localAIErr      *bytes.Buffer
 	localAIStopping bool
+	localExecutor *localexec.Executor
 }
 
 type stateStore interface {
@@ -146,9 +148,16 @@ func NewService(store stateStore, sshManager sshManager, sftpManager sftpManager
 	return service
 }
 
-// NewTUIService creates the same application service with only the dependencies
-// required by the terminal UI. Runtime SSH/SFTP managers are intentionally not
-// constructed in the CLI process; the TUI does not own protocol execution.
+// NewLocalAgentService creates an agent-only service with local execution and
+// deliberately no SSH or SFTP managers. Commands run as the current OS user.
+func NewLocalAgentService(store stateStore) (*Service, error) {
+	executor, err := localexec.New()
+	if err != nil { return nil, err }
+	return &Service{store: store, httpClient: &http.Client{Timeout: 120 * time.Second}, emitFn: func(string, ...interface{}) {}, localExecutor: executor}, nil
+}
+
+// NewTUIService creates the application service with only the dependencies
+// required by the non-runtime terminal UI. It does not initialize SSH/SFTP.
 func NewTUIService(store stateStore) *Service {
 	return &Service{
 		store:  store,

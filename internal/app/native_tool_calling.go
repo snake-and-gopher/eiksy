@@ -69,6 +69,10 @@ func (s *Service) runNativeToolLoop(ctx context.Context, provider *ai.ProviderDe
 }
 
 func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.ProviderDescriptor, chatSessionID string, policy ai.CommandPolicy, activeSessionID, userMessage string, messages []nativeChatMessage, tools []map[string]any, emitEvent func(agentai.Event)) (string, bool, error) {
+	return s.runNativeToolLoopWithTargetEvents(ctx, provider, chatSessionID, policy, commandTargetSSH, activeSessionID, userMessage, messages, tools, emitEvent)
+}
+
+func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provider *ai.ProviderDescriptor, chatSessionID string, policy ai.CommandPolicy, target, activeSessionID, userMessage string, messages []nativeChatMessage, tools []map[string]any, emitEvent func(agentai.Event)) (string, bool, error) {
 	toolPolicy := normalizeCommandPolicy(policy)
 
 	for turn := 0; turn < 4; turn++ {
@@ -100,7 +104,14 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 			if emitEvent != nil {
 				emitEvent(agentai.Event{Type: agentai.EventToolStarted, Tool: call.Function.Name})
 			}
-			result, pending, err := s.dispatchNativeToolCall(call, toolPolicy, activeSessionID, provider.ID, userMessage, messages)
+			var result string
+			var pending bool
+			var err error
+			if normalizeCommandTarget(target) == commandTargetLocal {
+				result, pending, err = s.dispatchLocalToolCall(ctx, call, toolPolicy, provider.ID, userMessage, messages)
+			} else {
+				result, pending, err = s.dispatchNativeToolCall(call, toolPolicy, activeSessionID, provider.ID, userMessage, messages)
+			}
 			if emitEvent != nil && result != "" {
 				emitEvent(agentai.Event{Type: agentai.EventToolOutput, Tool: call.Function.Name, Content: result})
 			}
@@ -117,6 +128,7 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 								Approval: &agentai.ApprovalRequest{
 									RequestID: request.ID,
 									ToolID: request.ToolID,
+									Target: request.Target,
 									SessionID: request.SessionID,
 									Command: request.Command,
 									Reason: request.Reason,
@@ -138,7 +150,11 @@ func (s *Service) runNativeToolLoopWithEvents(ctx context.Context, provider *ai.
 }
 
 func (s *Service) nativeMessagesFromState(state ai.WorkspaceState, activeSessionID string) []nativeChatMessage {
-	messages := []nativeChatMessage{{Role: "system", Content: s.nativeToolSystemPrompt(state.CommandPolicy, activeSessionID)}}
+	return s.nativeMessagesFromStateForTarget(state, commandTargetSSH, activeSessionID)
+}
+
+func (s *Service) nativeMessagesFromStateForTarget(state ai.WorkspaceState, target, activeSessionID string) []nativeChatMessage {
+	messages := []nativeChatMessage{{Role: "system", Content: s.nativeToolSystemPromptForTarget(state.CommandPolicy, target, activeSessionID)}}
 	for _, message := range state.AgentMessages {
 		messages = append(messages, nativeChatMessage{Role: message.Role, Content: message.Content})
 	}
@@ -540,15 +556,18 @@ func (s *Service) resumePendingNativeToolCall(ctx context.Context, pending *ai.P
 	if err := s.store.UpdateAIState(state); err != nil {
 		return fmt.Errorf("clear pending native tool call: %w", err)
 	}
+	target := normalizeCommandTarget(pending.Target)
 	tools := []map[string]any(nil)
-	if commandToolEnabled(state.CommandPolicy, nativeSSHExecPolicyToolID) || commandToolEnabled(state.CommandPolicy, "sftp") {
+	if target == commandTargetLocal {
+		if commandToolEnabled(state.CommandPolicy, nativeLocalShellPolicyToolID) || commandToolEnabled(state.CommandPolicy, nativeLocalFilesPolicyToolID) { tools = openAILocalToolDefinitions() }
+	} else if commandToolEnabled(state.CommandPolicy, nativeSSHExecPolicyToolID) || commandToolEnabled(state.CommandPolicy, "sftp") {
 		tools = openAIToolDefinitions()
 	}
 	if len(messages) > 0 && messages[0].Role == "system" {
-		messages[0].Content = s.nativeToolSystemPrompt(state.CommandPolicy, pending.SessionID)
+		messages[0].Content = s.nativeToolSystemPromptForTarget(state.CommandPolicy, target, pending.SessionID)
 	}
 	messages = append(messages, nativeChatMessage{Role: "tool", ToolCallID: pending.ToolCallID, Content: toolResult})
-	_, _, err = s.runNativeToolLoop(ctx, provider, state.ChatSessionID, state.CommandPolicy, pending.SessionID, pending.UserMessage, messages, tools)
+	_, _, err = s.runNativeToolLoopWithTargetEvents(ctx, provider, state.ChatSessionID, state.CommandPolicy, target, pending.SessionID, pending.UserMessage, messages, tools, nil)
 	return err
 }
 
@@ -590,6 +609,13 @@ func marshalNativeToolError(format string, args ...any) string {
 }
 
 func (s *Service) nativeToolSystemPrompt(policy ai.CommandPolicy, activeSessionID string) string {
+	return s.nativeToolSystemPromptForTarget(policy, commandTargetSSH, activeSessionID)
+}
+
+func (s *Service) nativeToolSystemPromptForTarget(policy ai.CommandPolicy, target, activeSessionID string) string {
+	if normalizeCommandTarget(target) == commandTargetLocal {
+		return localAgentSystemPrompt(policy, s.localExecutor)
+	}
 	normalized := normalizeCommandPolicy(policy)
 	enabled := make([]string, 0, len(normalized.Tools))
 	for _, tool := range normalized.Tools {

@@ -186,6 +186,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	if pending.SessionID != "" || request.SessionID != "" {
 		return fmt.Errorf("local approval must not reference an SSH session")
 	}
+	if normalizeCommandTarget(request.Target) != commandTargetLocal { return fmt.Errorf("approval request target does not match local execution") }
 	if policyToolIDForNativeTool(pending.ToolName) != request.ToolID {
 		return fmt.Errorf("pending local tool %q does not match approved policy tool %q", pending.ToolName, request.ToolID)
 	}
@@ -229,6 +230,9 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	decoder := json.NewDecoder(strings.NewReader(pending.ToolArguments))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&args); err != nil { return fmt.Errorf("decode pending local tool call: %w", err) }
+	pendingCommand := strings.TrimSpace(args.Command)
+	if pendingCommand == "" { pendingCommand = strings.TrimSpace(args.Path) }
+	if pendingCommand != request.Command { return fmt.Errorf("pending local tool arguments no longer match the approved operation") }
 	result, status, executeErr := s.executeLocalTool(s.resolveContext(context.Background()), pending.ToolName, args)
 	s.recordCommandAudit(pending.ProviderID, "", request.Command, string(decision), string(mode), status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType),Error:result.Error})
 	s.emitNativeOperation(status, "", pending.ToolName+" "+request.Command, result, string(mode), errString(executeErr))

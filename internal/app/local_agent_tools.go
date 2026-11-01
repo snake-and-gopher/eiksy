@@ -195,7 +195,13 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 
 	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", request.Command)
 	if decision == commandPolicyDecisionDeny {
-		return fmt.Errorf("local operation denied by Command Policy: %s", reason)
+		filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
+		for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
+		policy.PendingRequests = filtered
+		state.CommandPolicy = policy
+		state.PendingNativeToolCall = nil
+		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied local approval: %w", err) }
+		return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, marshalNativeToolError("local operation denied by Command Policy: %s", reason))
 	}
 	switch mode {
 	case ai.CommandPermissionModeNow:

@@ -69,7 +69,7 @@ func TestLocalShellRejectsShellOperators(t *testing.T) {
 	result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "test", nil)
 	if err != nil { t.Fatal(err) }
 	if pending { t.Fatal("unsafe shell syntax must be denied, not approved") }
-	if !contains(result, "denied") { t.Fatalf("expected policy denial, got %s", result) }
+	if !strings.Contains(result, "denied") { t.Fatalf("expected policy denial, got %s", result) }
 }
 
 func mustJSON(t *testing.T, value string) string {
@@ -79,4 +79,15 @@ func mustJSON(t *testing.T, value string) string {
 	return string(encoded)
 }
 
-func contains(value, fragment string) bool { return strings.Contains(value, fragment) }
+
+
+func TestLocalShellRejectsPrivilegeEscalation(t *testing.T) {
+	service, err := NewLocalAgentService(memory.NewStore())
+	if err != nil { t.Fatal(err) }
+	for _, command := range []string{"sudo id", "/usr/bin/sudo id", "runas.exe cmd.exe", "doas whoami", "powershell Start-Process cmd.exe -Verb RunAs"} {
+		call := localCall(nativeLocalExecToolName, `{"command":`+mustJSON(t,command)+`}`)
+		result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "test", nil)
+		if err != nil { t.Fatal(err) }
+		if pending || !strings.Contains(result, "privilege escalation") { t.Fatalf("expected hard denial for %q, got pending=%v result=%s", command, pending, result) }
+	}
+}

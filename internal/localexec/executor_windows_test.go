@@ -8,7 +8,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func TestNewRestrictedTokenDisablesAdministratorsGroup(t *testing.T) {
+func TestWindowsLocalAgentRejectsElevatedParentAndCreatesRestrictedToken(t *testing.T) {
+	if err := HardenProcess(); err != nil { t.Fatalf("HardenProcess() error = %v", err) }
 	token, err := newRestrictedToken()
 	if err != nil {
 		t.Fatalf("newRestrictedToken() error = %v", err)

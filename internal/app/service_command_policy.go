@@ -28,6 +28,7 @@ const (
 	maxAgentSkillNameLength = 80
 	maxAgentSkillDescriptionLength = 300
 	maxAgentSkillInstructionsLength = 12000
+	maxAgentSkillsTotalInstructions = 48000
 )
 
 func (s *Service) UpdateAgentSkills(skills []ai.AgentSkill) error {
@@ -35,6 +36,7 @@ func (s *Service) UpdateAgentSkills(skills []ai.AgentSkill) error {
 	seenIDs := make(map[string]struct{}, len(skills))
 	seenNames := make(map[string]struct{}, len(skills))
 	cleaned := make([]ai.AgentSkill, 0, len(skills))
+	totalInstructions := 0
 	for _, skill := range skills {
 		skill.ID = strings.TrimSpace(skill.ID)
 		skill.Name = strings.TrimSpace(skill.Name)
@@ -44,6 +46,8 @@ func (s *Service) UpdateAgentSkills(skills []ai.AgentSkill) error {
 		if len([]rune(skill.Name)) > maxAgentSkillNameLength { return fmt.Errorf("agent skill name exceeds %d characters", maxAgentSkillNameLength) }
 		if len([]rune(skill.Description)) > maxAgentSkillDescriptionLength { return fmt.Errorf("agent skill description exceeds %d characters", maxAgentSkillDescriptionLength) }
 		if len([]byte(skill.Instructions)) > maxAgentSkillInstructionsLength { return fmt.Errorf("agent skill instructions exceed %d bytes", maxAgentSkillInstructionsLength) }
+		totalInstructions += len([]byte(skill.Instructions))
+		if totalInstructions > maxAgentSkillsTotalInstructions { return fmt.Errorf("combined agent skill instructions exceed %d bytes", maxAgentSkillsTotalInstructions) }
 		if _, exists := seenIDs[skill.ID]; exists { return fmt.Errorf("duplicate agent skill id %q", skill.ID) }
 		nameKey := strings.ToLower(skill.Name)
 		if _, exists := seenNames[nameKey]; exists { return fmt.Errorf("duplicate agent skill name %q", skill.Name) }

@@ -112,7 +112,7 @@ func TestProviderSelectionOpensCloudConfiguration(t *testing.T) {
 }
 
 func TestApprovalEventIsRenderedInChat(t *testing.T) {
-	model := Model{screen:screenChat}
+	model := Model{screen:screenChat, width:80, height:24}
 	model.handleAgentEvent(agentai.Event{Type:agentai.EventApprovalRequired,Approval:&agentai.ApprovalRequest{RequestID:"request-1",ToolID:"local-files",Command:"local.file.write /tmp/example"}})
 	if model.approval == nil { t.Fatal("expected approval request") }
 	if !strings.Contains(model.View(), "APPROVAL REQUIRED") { t.Fatal("expected approval prompt in terminal view") }

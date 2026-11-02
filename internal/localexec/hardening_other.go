@@ -2,11 +2,15 @@
 
 package localexec
 
-import "os/exec"
+import (
 	"fmt"
+	"os/exec"
+)
 
-// HardenProcess is a no-op on platforms without a supported no-elevation
-// primitive. Local execution remains subject to the launching user's token.
-func HardenProcess() error { return fmt.Errorf("local command execution is not supported on this platform because privilege restrictions are unavailable") }
+// HardenProcess fails closed on platforms without a supported no-elevation
+// primitive. The local agent must not silently run unrestricted commands.
+func HardenProcess() error {
+	return fmt.Errorf("local command execution is not supported on this platform because privilege restrictions are unavailable")
+}
 
 func configureCommand(_ *exec.Cmd) (func(), error) { return nil, nil }

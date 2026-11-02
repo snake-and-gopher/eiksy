@@ -23,6 +23,7 @@ The existing agent execution path is coupled to SSH session IDs in its tool sche
 
 - The agent executes commands on the local host where `eiksy-cli` is running.
 - Commands run as the operating-system user that launched the CLI. Eiksy must not elevate privileges or implicitly invoke `sudo`, `runas`, or an equivalent privilege escalation.
+- The local execution boundary must enforce this at the process-token/kernel level, not only by matching command text: Linux uses `PR_SET_NO_NEW_PRIVS`; Windows uses a restricted child-process token with the Administrators SID disabled and privileges removed. Unsupported platforms fail closed.
 - Local file operations use the same process identity and are subject to operating-system access controls.
 - The model does not choose a host or session ID. The local execution target is established by trusted CLI/application code.
 - The implementation must use a dedicated local execution boundary. It must not represent the local host as an SSH session or route local work through SSH/SFTP adapters.
@@ -54,7 +55,7 @@ The existing agent execution path is coupled to SSH session IDs in its tool sche
 
 - Starting `eiksy-cli` without arguments opens the local agent directly and does not initialize SSH/SFTP managers.
 - No SSH profile, remote session, host key, or SFTP operation is required or exposed by the CLI.
-- Local commands and file operations run only with the launching user's operating-system permissions.
+- Local commands and file operations run only with the launching user's operating-system permissions, with privilege elevation blocked by OS-level process restrictions.
 - The agent can show the exact operations it requested and their bounded results in the terminal transcript.
 - Approval is required and enforced for operations classified as sensitive/destructive; denial guarantees no execution.
 - Pending approvals can be resumed safely after approval without retargeting to a remote or different execution context.

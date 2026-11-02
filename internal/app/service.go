@@ -151,6 +151,7 @@ func NewService(store stateStore, sshManager sshManager, sftpManager sftpManager
 // NewLocalAgentService creates an agent-only service with local execution and
 // deliberately no SSH or SFTP managers. Commands run as the current OS user.
 func NewLocalAgentService(store stateStore) (*Service, error) {
+	if err := localexec.HardenProcess(); err != nil { return nil, fmt.Errorf("harden local execution: %w", err) }
 	executor, err := localexec.New()
 	if err != nil { return nil, err }
 	return &Service{store: store, httpClient: &http.Client{Timeout: 120 * time.Second}, emitFn: func(string, ...interface{}) {}, localExecutor: executor}, nil

@@ -77,6 +77,9 @@ func (e *Executor) Run(ctx context.Context, command string) (Result, error) {
 		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", command)
 	}
 	cmd.Dir = e.workingDir
+	cleanup, err := configureCommand(cmd)
+	if err != nil { return Result{Command:command, ExitCode:-1}, fmt.Errorf("configure restricted local command: %w", err) }
+	if cleanup != nil { defer cleanup() }
 
 	stdout := newLimitedBuffer(e.maxOutputBytes)
 	stderr := newLimitedBuffer(e.maxOutputBytes)
@@ -84,7 +87,7 @@ func (e *Executor) Run(ctx context.Context, command string) (Result, error) {
 	cmd.Stderr = stderr
 
 	started := time.Now()
-	err := cmd.Run()
+	err = cmd.Run()
 	result := Result{
 		Command:   command,
 		Stdout:    stdout.String(),

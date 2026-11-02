@@ -214,7 +214,7 @@ func isPrivilegeEscalationCommand(command string) bool {
 		token = strings.Trim(token, "\"'")
 		if index := strings.LastIndexAny(token, "/\\"); index >= 0 { token = token[index+1:] }
 		switch token {
-		case "sudo", "doas", "su", "runas", "runas.exe", "pkexec": return true
+		case "sudo", "sudoedit", "doas", "su", "su.exe", "runas", "runas.exe", "runuser", "gsudo", "pkexec": return true
 		}
 	}
 	return false

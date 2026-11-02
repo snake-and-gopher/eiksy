@@ -93,7 +93,7 @@ func mustJSON(t *testing.T, value string) string {
 
 func TestLocalShellRejectsPrivilegeEscalation(t *testing.T) {
 	service := newUnlockedLocalAgentService(t)
-	for _, command := range []string{"sudo id", "/usr/bin/sudo id", "runas.exe cmd.exe", "doas whoami", "powershell Start-Process cmd.exe -Verb RunAs"} {
+	for _, command := range []string{"sudo id", "/usr/bin/sudo id", "sudoedit /etc/hosts", "runas.exe cmd.exe", "doas whoami", "runuser -u root id", "gsudo powershell", "powershell Start-Process cmd.exe -Verb RunAs"} {
 		call := localCall(nativeLocalExecToolName, `{"command":`+mustJSON(t,command)+`}`)
 		result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "test", nil)
 		if err != nil { t.Fatal(err) }

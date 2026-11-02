@@ -41,3 +41,20 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+  windows-local-agent:
+    name: Windows local-agent security tests
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test local execution and application packages
+        run: go test -timeout 2m ./internal/localexec ./cmd/eiksy-cli

@@ -13,6 +13,7 @@ import (
 	"eiksy/internal/domain/ai"
 	"eiksy/internal/domain/sessions"
 	"eiksy/internal/localexec"
+	"eiksy/internal/securestorage"
 )
 
 const (
@@ -106,6 +107,7 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 		s.emitNativeOperation("approval_required", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "required", policyReason)
 		return fmt.Sprintf(`{"status":"approval_required","requestId":%q}`, request.ID), true, nil
 	case commandPolicyDecisionAllow:
+		if !s.store.SecureStorageStatus().Unlocked { return "", false, securestorage.ErrMasterPasswordRequired }
 		result, status, err := s.executeLocalTool(ctx, call.Function.Name, args)
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "not_required", status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType), Error:result.Error})
 		s.emitNativeOperation(status, "", call.Function.Name+" "+command, result, "not_required", errString(err))
@@ -219,6 +221,10 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, "denied", "user denied the local operation")
 		return nil
 	}
+
+	// Require an unlocked vault for every approved local operation, including
+	// operations using a local model that does not need an API token.
+	if !s.store.SecureStorageStatus().Unlocked { return securestorage.ErrMasterPasswordRequired }
 
 	// Resolve the provider (including its protected token) before executing the
 	// approved operation. If secure storage is locked, the caller must unlock it

@@ -910,13 +910,13 @@ func (m Model) View() string {
 			if i == m.providerIndex { marker = "› " }
 			selected := ""
 			if provider.Selected { selected = "  *" }
-			fmt.Fprintf(&body, "%s%s%s  [%s]  %s\n", marker, safeTerminalText(provider.Name), selected, safeTerminalText(provider.Status), safeTerminalText(provider.Model))
+			fmt.Fprintf(&body, "%s%s%s  [%s]  %s\n", marker, safeTerminalLine(provider.Name), selected, safeTerminalLine(provider.Status), safeTerminalLine(provider.Model))
 		}
 		body.WriteString("\n↑/↓ select · Enter configure · Esc back")
 	case screenCloudConfig:
 		body.WriteString("OPENAI-COMPATIBLE PROVIDER\n\n")
-		fmt.Fprintf(&body, "%sModel:    %s\n", fieldMarker(m.configField, 0), safeTerminalText(m.cloudModel))
-		fmt.Fprintf(&body, "%sEndpoint: %s\n", fieldMarker(m.configField, 1), safeTerminalText(m.cloudEndpoint))
+		fmt.Fprintf(&body, "%sModel:    %s\n", fieldMarker(m.configField, 0), safeTerminalLine(m.cloudModel))
+		fmt.Fprintf(&body, "%sEndpoint: %s\n", fieldMarker(m.configField, 1), safeTerminalLine(m.cloudEndpoint))
 		fmt.Fprintf(&body, "%sAPI token: %s\n", fieldMarker(m.configField, 2), masked(m.cloudToken))
 		body.WriteString("\nTab/↑/↓ change field · Ctrl+L load models · Ctrl+S save · Esc cancel")
 		if len(m.modelChoices) > 0 {
@@ -927,7 +927,7 @@ func (m Model) View() string {
 		status := "not configured"
 		if provider != nil { status = provider.Status }
 		body.WriteString("LOCAL MODEL\n\n")
-		fmt.Fprintf(&body, "Status: %s\nDownload URL: %s\n", safeTerminalText(status), safeTerminalText(m.localURL))
+		fmt.Fprintf(&body, "Status: %s\nDownload URL: %s\n", safeTerminalLine(status), safeTerminalLine(m.localURL))
 		body.WriteString("\nCtrl+S save · Ctrl+D download · Ctrl+R start/stop · Esc cancel")
 	case screenChat:
 		if len(m.transcript) == 0 {
@@ -938,7 +938,7 @@ func (m Model) View() string {
 			if start < 0 { start = 0 }
 			for _, entry := range m.transcript[start:] {
 				if entry.isTool {
-					fmt.Fprintf(&body, "[%s] %s\n", safeTerminalText(entry.tool), safeTerminalText(entry.status))
+					fmt.Fprintf(&body, "[%s] %s\n", safeTerminalLine(entry.tool), safeTerminalLine(entry.status))
 					if entry.output != "" { fmt.Fprintf(&body, "%s\n", safeTerminalText(entry.output)) }
 					body.WriteString("\n")
 					continue
@@ -952,8 +952,8 @@ func (m Model) View() string {
 		if m.approval != nil {
 			body.WriteString("\n")
 			body.WriteString(title.Render("APPROVAL REQUIRED"))
-			fmt.Fprintf(&body, "\nTool: %s\nOperation: %s\n", safeTerminalText(m.approval.ToolID), safeTerminalText(m.approval.Command))
-			if m.approval.Reason != "" { fmt.Fprintf(&body, "Reason: %s\n", safeTerminalText(m.approval.Reason)) }
+			fmt.Fprintf(&body, "\nTool: %s\nOperation: %s\n", safeTerminalLine(m.approval.ToolID), safeTerminalLine(m.approval.Command))
+			if m.approval.Reason != "" { fmt.Fprintf(&body, "Reason: %s\n", safeTerminalLine(m.approval.Reason)) }
 			if m.approval.Preview != "" { fmt.Fprintf(&body, "Details:\n%s\n", safeTerminalText(m.approval.Preview)) }
 			body.WriteString("\n[Y] allow once   [A] always allow exact operation   [N] deny")
 		}
@@ -961,7 +961,7 @@ func (m Model) View() string {
 		body.WriteString("\n\n> " + safeTerminalText(m.input) + "▌")
 	}
 	body.WriteString("\n\n")
-	body.WriteString(muted.Render(safeTerminalText(m.status)))
+	body.WriteString(muted.Render(safeTerminalLine(m.status)))
 	footer := muted.Render("\nEnter send/confirm · /provider configure model · /help commands · Ctrl+C exit")
 	return panel.Render(body.String()+footer)
 }
@@ -995,6 +995,13 @@ func safeTerminalText(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+func safeTerminalLine(value string) string {
+	value = safeTerminalText(value)
+	value = strings.ReplaceAll(value, "\n", "\\n")
+	value = strings.ReplaceAll(value, "\t", "\\t")
+	return value
 }
 
 func truncateDisplay(value string, limit int) string {

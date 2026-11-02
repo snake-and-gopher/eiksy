@@ -737,14 +737,14 @@ func (m *Model) updateChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.Type == tea.KeyCtrlJ {
-			m.input = insertAtRune(m.input, m.cursor, "\n")
-			m.cursor++
-			return m, nil
-		}
-		if msg.Type == tea.KeyEnter {
-			value := strings.TrimSpace(m.input)
-			m.input = ""
-			m.cursor = 0
+		m.input = insertAtRune(m.input, m.cursor, "\n")
+		m.cursor++
+		return m, nil
+	}
+	if msg.Type == tea.KeyEnter {
+		value := strings.TrimSpace(m.input)
+		m.input = ""
+		m.cursor = 0
 		if value == "" { return m, nil }
 		if strings.HasPrefix(value, "/") { return m, m.handleSlashCommand(value) }
 		if !m.hasConfiguredSelectedProvider() {
@@ -933,7 +933,7 @@ func (m *Model) currentProvider() *domainai.ProviderDescriptor {
 
 func (m Model) View() string {
 	width := m.width
-	if width < 40 { width = 40 }
+	if width < 24 { width = 24 }
 	if width > 120 { width = 120 }
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))

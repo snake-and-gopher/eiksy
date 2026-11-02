@@ -56,9 +56,9 @@ func TestLocalFileWriteExecutesOnlyWhenLocalPolicyAllows(t *testing.T) {
 	result, pending, err := service.dispatchLocalToolCall(context.Background(), call, state.CommandPolicy, "provider-1", "write a file", nil)
 	if err != nil { t.Fatalf("dispatch local write: %v", err) }
 	if pending { t.Fatalf("unexpected approval: %s", result) }
-	content, err := os.ReadFile(target)
-	if err != nil { t.Fatalf("read written file: %v", err) }
-	if string(content) != "approved by policy" { t.Fatalf("unexpected file content %q", content) }
+	written, readErr := os.ReadFile(target)
+	if readErr != nil { t.Fatalf("read written file: %v", readErr) }
+	if string(written) != "approved by policy" { t.Fatalf("unexpected file content %q", written) }
 	info, err := os.Stat(target)
 	if err != nil { t.Fatal(err) }
 	if info.Mode().Perm()&0o077 != 0 { t.Fatalf("expected private file permissions, got %o", info.Mode().Perm()) }

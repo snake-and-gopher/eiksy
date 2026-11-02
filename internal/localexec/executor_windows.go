@@ -13,7 +13,7 @@ import (
 
 const createRestrictedTokenDisableMaxPrivilege = 0x1
 
-var advapi32 = syscall.NewLazyDLL("advapi32.dll")
+var advapi32 = windows.NewLazySystemDLL("advapi32.dll")
 var procCreateRestrictedToken = advapi32.NewProc("CreateRestrictedToken")
 
 func configureCommand(cmd *exec.Cmd) (func(), error) {

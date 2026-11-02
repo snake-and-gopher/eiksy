@@ -167,6 +167,7 @@ func (a *App) SendPlainChatMessage(message string) error {
 }
 func (a *App) ClearChat() error { return a.currentService().ClearChat() }
 func (a *App) UpdateCommandPolicy(policy ai.CommandPolicy) error { return a.currentService().UpdateCommandPolicy(policy) }
+func (a *App) UpdateAgentSkills(skills []ai.AgentSkill) error { return a.currentService().UpdateAgentSkills(skills) }
 
 func (a *App) ResolveCommandPolicyRequest(requestID, mode string) error {
 	service := a.currentService()

@@ -474,3 +474,44 @@ func TestEmitNativeOperationIncludesToolCallID(t *testing.T) {
 	if payload == nil { t.Fatal("expected operation event payload") }
 	if payload["toolCallId"] != "call-123" { t.Fatalf("expected tool call identity, got %#v",payload["toolCallId"]) }
 }
+
+
+func TestFormatAgentSkillsIncludesOnlyEnabledSkills(t *testing.T) {
+	skills := []ai.AgentSkill{
+		{ID: "go", Name: "Go reviewer", Description: "Review Go code", Instructions: "Check error handling and tests.", Enabled: true},
+		{ID: "disabled", Name: "Disabled", Description: "Not active", Instructions: "Do not include me.", Enabled: false},
+	}
+	prompt := formatAgentSkills(skills)
+	if !strings.Contains(prompt, "Go reviewer") || !strings.Contains(prompt, "Check error handling and tests.") {
+		t.Fatalf("enabled skill was not included in prompt: %q", prompt)
+	}
+	if strings.Contains(prompt, "Do not include me.") {
+		t.Fatalf("disabled skill was included in prompt: %q", prompt)
+	}
+	if !strings.Contains(prompt, "do not grant additional tools") {
+		t.Fatalf("skill security boundary is missing: %q", prompt)
+	}
+}
+
+func TestUpdateAgentSkillsPersistsAndValidates(t *testing.T) {
+	store := memory.NewStore()
+	service := NewService(store, nil, nil)
+	skills := []ai.AgentSkill{{ID: "go-review", Name: " Go review ", Description: " Review Go code ", Instructions: " Check tests. ", Enabled: true}}
+	if err := service.UpdateAgentSkills(skills); err != nil {
+		t.Fatalf("persist skills: %v", err)
+	}
+	saved := store.AIState().AgentSkills
+	if len(saved) != 1 || saved[0].Name != "Go review" || saved[0].Instructions != "Check tests." {
+		t.Fatalf("unexpected saved skills: %#v", saved)
+	}
+	duplicate := []ai.AgentSkill{
+		{ID: "one", Name: "Same", Description: "First", Instructions: "First"},
+		{ID: "two", Name: "same", Description: "Second", Instructions: "Second"},
+	}
+	if err := service.UpdateAgentSkills(duplicate); err == nil {
+		t.Fatal("expected duplicate skill names to be rejected")
+	}
+	if got := store.AIState().AgentSkills; len(got) != 1 || got[0].ID != "go-review" {
+		t.Fatalf("invalid update changed persisted skills: %#v", got)
+	}
+}

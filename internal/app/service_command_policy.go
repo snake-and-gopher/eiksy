@@ -23,6 +23,44 @@ func (s *Service) ClearChat() error {
 	return nil
 }
 
+const (
+	maxAgentSkills = 20
+	maxAgentSkillNameLength = 80
+	maxAgentSkillDescriptionLength = 300
+	maxAgentSkillInstructionsLength = 12000
+	maxAgentSkillsTotalInstructions = 48000
+)
+
+func (s *Service) UpdateAgentSkills(skills []ai.AgentSkill) error {
+	if len(skills) > maxAgentSkills { return fmt.Errorf("at most %d agent skills are allowed", maxAgentSkills) }
+	seenIDs := make(map[string]struct{}, len(skills))
+	seenNames := make(map[string]struct{}, len(skills))
+	cleaned := make([]ai.AgentSkill, 0, len(skills))
+	totalInstructions := 0
+	for _, skill := range skills {
+		skill.ID = strings.TrimSpace(skill.ID)
+		skill.Name = strings.TrimSpace(skill.Name)
+		skill.Description = strings.TrimSpace(skill.Description)
+		skill.Instructions = strings.TrimSpace(skill.Instructions)
+		if skill.ID == "" || skill.Name == "" || skill.Description == "" || skill.Instructions == "" { return fmt.Errorf("agent skill id, name, description, and instructions are required") }
+		if len([]rune(skill.Name)) > maxAgentSkillNameLength { return fmt.Errorf("agent skill name exceeds %d characters", maxAgentSkillNameLength) }
+		if len([]rune(skill.Description)) > maxAgentSkillDescriptionLength { return fmt.Errorf("agent skill description exceeds %d characters", maxAgentSkillDescriptionLength) }
+		if len([]byte(skill.Instructions)) > maxAgentSkillInstructionsLength { return fmt.Errorf("agent skill instructions exceed %d bytes", maxAgentSkillInstructionsLength) }
+		totalInstructions += len([]byte(skill.Instructions))
+		if totalInstructions > maxAgentSkillsTotalInstructions { return fmt.Errorf("combined agent skill instructions exceed %d bytes", maxAgentSkillsTotalInstructions) }
+		if _, exists := seenIDs[skill.ID]; exists { return fmt.Errorf("duplicate agent skill id %q", skill.ID) }
+		nameKey := strings.ToLower(skill.Name)
+		if _, exists := seenNames[nameKey]; exists { return fmt.Errorf("duplicate agent skill name %q", skill.Name) }
+		seenIDs[skill.ID] = struct{}{}
+		seenNames[nameKey] = struct{}{}
+		cleaned = append(cleaned, skill)
+	}
+	state := s.store.AIState()
+	state.AgentSkills = cleaned
+	if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist agent skills: %w", err) }
+	return nil
+}
+
 func (s *Service) UpdateCommandPolicy(policy ai.CommandPolicy) error {
 	state := s.store.AIState()
 	state.CommandPolicy = normalizeCommandPolicy(policy)

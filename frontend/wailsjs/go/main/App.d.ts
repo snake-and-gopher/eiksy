@@ -77,6 +77,8 @@ export function ClearChat():Promise<void>;
 
 export function UpdateCommandPolicy(arg1:ai.CommandPolicy):Promise<void>;
 
+export function UpdateAgentSkills(arg1:Array<ai.AgentSkill>):Promise<void>;
+
 export function ResolveCommandPolicyRequest(arg1:string,arg2:string):Promise<void>;
 
 export function AcceptSSHHostKey(arg1:string):Promise<void>;

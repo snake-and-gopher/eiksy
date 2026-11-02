@@ -66,7 +66,7 @@ The local agent has a dedicated tool set:
 
 All operations run as the operating-system user who launched the CLI and are constrained by that user's permissions. The CLI never opens SSH connections, creates remote sessions, uses SFTP, invokes privilege elevation, or treats the local host as an SSH session.
 
-Command Policy evaluates local operations separately from SSH policy. When approval is required, the requested operation is shown in the conversation. File writes include a bounded preview of the content and target path so you can inspect what will be written before approving:
+Command Policy evaluates local operations separately from SSH policy. When approval is required, the requested operation is shown in the conversation. File writes include the target path, byte count, SHA-256 fingerprint and a bounded content preview so you can inspect what will be written before approving:
 
 | Key | Action |
 | --- | --- |

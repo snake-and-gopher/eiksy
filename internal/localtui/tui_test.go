@@ -308,7 +308,7 @@ func TestChatInputSupportsRuneAwareEditing(t *testing.T) {
 		t.Fatalf("unexpected backspace: input=%q cursor=%d", model.input, model.cursor)
 	}
 	model.updateChatKey(tea.KeyMsg{Type:tea.KeyEnd})
-	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune{"!"}})
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune{'!'}})
 	if model.input != "a界c!" { t.Fatalf("unexpected end insertion: %q", model.input) }
 }
 
@@ -316,7 +316,7 @@ func TestChatInputSupportsMultilinePrompt(t *testing.T) {
 	model := Model{screen:screenChat, input:"first", cursor:5}
 	model.updateChatKey(tea.KeyMsg{Type:tea.KeyCtrlJ})
 	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune("second")})
-	if model.input != "first\\nsecond" { t.Fatalf("expected multiline input, got %q", model.input) }
+	if model.input != "first\nsecond" { t.Fatalf("expected multiline input, got %q", model.input) }
 }
 
 func TestTranscriptCanScrollOlderAndReturnToLatest(t *testing.T) {

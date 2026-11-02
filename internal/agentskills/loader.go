@@ -52,31 +52,58 @@ func LoadProjectSkills(workingDir string) []ai.AgentSkill {
 }
 
 func findSkillsDirectory(workingDir string) string {
-	start, err := filepath.Abs(strings.TrimSpace(workingDir))
-	if err != nil || strings.TrimSpace(workingDir) == "" {
+	trimmed := strings.TrimSpace(workingDir)
+	if trimmed == "" || trimmed == "(unavailable)" {
 		return ""
 	}
-	current := filepath.Clean(start)
-	for {
-		candidate := filepath.Join(current, ".agents", "skills")
-		info, statErr := os.Lstat(candidate)
-		if statErr == nil {
-			if info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
-				return candidate
-			}
-			// An explicitly present but unsafe skills path must not cause a
-			// fallback to a parent directory.
-			return ""
-		}
+	start, err := filepath.Abs(trimmed)
+	if err != nil {
+		return ""
+	}
+	start = filepath.Clean(start)
+
+	// First locate the nearest repository root. Outside a Git repository,
+	// only the exact working directory is considered; this avoids inheriting
+	// skills from an unrelated parent directory such as the user's home.
+	repoRoot := ""
+	for current := start; ; current = filepath.Dir(current) {
 		if isGitRoot(current) {
+			repoRoot = current
+			break
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+	if repoRoot == "" {
+		return safeSkillsDirectory(start)
+	}
+
+	for current := start; ; current = filepath.Dir(current) {
+		if candidate := safeSkillsDirectory(current); candidate != "" {
+			return candidate
+		}
+		if current == repoRoot {
 			return ""
 		}
 		parent := filepath.Dir(current)
 		if parent == current {
 			return ""
 		}
-		current = parent
 	}
+}
+
+func safeSkillsDirectory(projectDir string) string {
+	candidate := filepath.Join(projectDir, ".agents", "skills")
+	info, err := os.Lstat(candidate)
+	if err != nil {
+		return ""
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return ""
+	}
+	return candidate
 }
 
 func isGitRoot(path string) bool {

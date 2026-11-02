@@ -121,8 +121,8 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 
 func localPolicyCommand(toolName, command, content string) string {
 	if toolName != nativeLocalFileWriteToolName { return command }
-	sum := sha256.Sum256([]byte(content))
-	return command + "\nsha256:" + hex.EncodeToString(sum[:])
+	sum := sha256.Sum256([]byte(command + "\x00" + content))
+	return "local.file.write:sha256:" + hex.EncodeToString(sum[:])
 }
 
 func (s *Service) executeLocalTool(ctx context.Context, toolName string, args struct {

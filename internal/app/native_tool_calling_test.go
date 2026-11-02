@@ -352,7 +352,7 @@ func TestDispatchNativeToolCallAutoApprovesAskDecision(t *testing.T) {
 	if err != nil { t.Fatalf("dispatch returned unexpected error: %v", err) }
 	if pending { t.Fatal("auto-approve must not create a pending request") }
 	if !strings.Contains(result, `"status":"executed"`) { t.Fatalf("expected executed result, got %q", result) }
-	if len(ssh.commands) != 1 || ssh.commands[0] != "session-1:uname -a\\n" { t.Fatalf("expected command to execute once, got %#v", ssh.commands) }
+	if len(ssh.commands) != 1 || ssh.commands[0] != "session-1:uname -a\n" { t.Fatalf("expected command to execute once, got %#v", ssh.commands) }
 }
 
 func TestDispatchNativeToolCallRejectsDifferentSession(t *testing.T) {

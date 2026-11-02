@@ -21,6 +21,15 @@ func localCall(name, args string) nativeToolCall {
 	return call
 }
 
+func newUnlockedLocalAgentService(t *testing.T) *Service {
+	t.Helper()
+	store := memory.NewStore()
+	if err := store.EnsureMasterPassword("test-master-password"); err != nil { t.Fatal(err) }
+	service, err := NewLocalAgentService(store)
+	if err != nil { t.Fatal(err) }
+	return service
+}
+
 func TestLocalAgentServiceHasNoSSHOrSFTPManagers(t *testing.T) {
 	service, err := NewLocalAgentService(memory.NewStore())
 	if err != nil { t.Fatalf("create local agent service: %v", err) }
@@ -29,8 +38,7 @@ func TestLocalAgentServiceHasNoSSHOrSFTPManagers(t *testing.T) {
 }
 
 func TestLocalFileWriteRequiresApprovalByDefault(t *testing.T) {
-	service, err := NewLocalAgentService(memory.NewStore())
-	if err != nil { t.Fatal(err) }
+	service := newUnlockedLocalAgentService(t)
 	target := filepath.Join(t.TempDir(), "approval.txt")
 	call := localCall(nativeLocalFileWriteToolName, `{"path":`+mustJSON(t,target)+`,"content":"must-not-exist","reason":"create a test file"}`)
 	result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "write a file", []nativeChatMessage{{Role:"user",Content:"write a file"}})
@@ -44,8 +52,7 @@ func TestLocalFileWriteRequiresApprovalByDefault(t *testing.T) {
 }
 
 func TestLocalFileWriteExecutesOnlyWhenLocalPolicyAllows(t *testing.T) {
-	service, err := NewLocalAgentService(memory.NewStore())
-	if err != nil { t.Fatal(err) }
+	service := newUnlockedLocalAgentService(t)
 	target := filepath.Join(t.TempDir(), "allowed.txt")
 	state := service.store.AIState()
 	content := "approved by policy"
@@ -65,8 +72,7 @@ func TestLocalFileWriteExecutesOnlyWhenLocalPolicyAllows(t *testing.T) {
 }
 
 func TestLocalShellRejectsShellOperators(t *testing.T) {
-	service, err := NewLocalAgentService(memory.NewStore())
-	if err != nil { t.Fatal(err) }
+	service := newUnlockedLocalAgentService(t)
 	call := localCall(nativeLocalExecToolName, `{"command":"echo safe && touch /tmp/not-allowed"}`)
 	result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "test", nil)
 	if err != nil { t.Fatal(err) }
@@ -84,8 +90,7 @@ func mustJSON(t *testing.T, value string) string {
 
 
 func TestLocalShellRejectsPrivilegeEscalation(t *testing.T) {
-	service, err := NewLocalAgentService(memory.NewStore())
-	if err != nil { t.Fatal(err) }
+	service := newUnlockedLocalAgentService(t)
 	for _, command := range []string{"sudo id", "/usr/bin/sudo id", "runas.exe cmd.exe", "doas whoami", "powershell Start-Process cmd.exe -Verb RunAs"} {
 		call := localCall(nativeLocalExecToolName, `{"command":`+mustJSON(t,command)+`}`)
 		result, pending, err := service.dispatchLocalToolCall(context.Background(), call, service.store.AIState().CommandPolicy, "provider-1", "test", nil)

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -72,7 +74,8 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 	}
 
 	toolID := policyToolIDForNativeTool(call.Function.Name)
-	decision, policyReason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, toolID, "", command)
+	policyCommand := localPolicyCommand(call.Function.Name, command, args.Content)
+	decision, policyReason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, toolID, "", policyCommand)
 	switch decision {
 	case commandPolicyDecisionDeny:
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "denied", "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied", Error:policyReason})
@@ -86,6 +89,7 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 			ID: fmt.Sprintf("cmdreq-%d", time.Now().UTC().UnixNano()),
 			ToolID: toolID,
 			Command: command,
+			PolicyCommand: policyCommand,
 			Reason: reason,
 			RequestedAt: time.Now().UTC().Format(time.RFC3339),
 		}
@@ -113,6 +117,12 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 	default:
 		return marshalNativeToolError("unknown local policy decision"), false, nil
 	}
+}
+
+func localPolicyCommand(toolName, command, content string) string {
+	if toolName != nativeLocalFileWriteToolName { return command }
+	sum := sha256.Sum256([]byte(content))
+	return command + "\nsha256:" + hex.EncodeToString(sum[:])
 }
 
 func (s *Service) executeLocalTool(ctx context.Context, toolName string, args struct {
@@ -227,8 +237,11 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	pendingCommand := strings.TrimSpace(args.Command)
 	if pendingCommand == "" { pendingCommand = strings.TrimSpace(args.Path) }
 	if pendingCommand != request.Command { return fmt.Errorf("pending local tool arguments no longer match the approved operation") }
+	if request.PolicyCommand != "" && localPolicyCommand(pending.ToolName, pendingCommand, args.Content) != request.PolicyCommand { return fmt.Errorf("pending local operation content no longer matches its approval policy key") }
 
-	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", request.Command)
+	policyCommand := request.PolicyCommand
+	if policyCommand == "" { policyCommand = request.Command } // Legacy pending requests used the display command as their policy key.
+	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", policyCommand)
 	if decision == commandPolicyDecisionDeny {
 		filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
 		for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
@@ -243,7 +256,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	switch mode {
 	case ai.CommandPermissionModeNow:
 	case ai.CommandPermissionModeAlways:
-		policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target:commandTargetLocal,ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact local operation"})
+		policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target:commandTargetLocal,ToolID:request.ToolID,Pattern:policyCommand,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact local operation"})
 	case ai.CommandPermissionModeSession:
 		return fmt.Errorf("session-scoped local approvals are not available for the standalone local agent")
 	default:

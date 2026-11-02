@@ -250,3 +250,82 @@ func TestDenyApprovalDoesNotRequireVaultUnlock(t *testing.T) {
 		t.Fatalf("expected denial without unlock, calls=%d screen=%v approval=%#v", backend.resolveCalls, model.screen, model.approval)
 	}
 }
+
+
+func TestLocalOperationWithoutApprovalUpdatesExistingToolTranscript(t *testing.T) {
+	model := Model{screen:screenChat, transcript:[]transcriptEntry{{
+		isTool:true, tool:"local.exec", status:"running",
+	}}}
+	model.handleLocalOperation(map[string]any{
+		"approval":"not_required",
+		"status":"executed",
+		"command":"local.exec pwd",
+		"exitCode":0,
+		"stdout":"/workspace",
+		"stderr":"",
+		"durationMs":3,
+	})
+	if len(model.transcript) != 1 {
+		t.Fatalf("expected the existing tool entry to be updated, got %d entries", len(model.transcript))
+	}
+	entry := model.transcript[0]
+	if entry.status != "executed" {
+		t.Fatalf("expected executed status, got %q", entry.status)
+	}
+	for _, want := range []string{"local.exec pwd", "/workspace", "exitCode", "durationMs"} {
+		if !strings.Contains(entry.output, want) {
+			t.Fatalf("expected operation output to contain %q, got %q", want, entry.output)
+		}
+	}
+}
+
+func TestLocalPolicyDenialUpdatesRunningToolEntry(t *testing.T) {
+	model := Model{screen:screenChat, transcript:[]transcriptEntry{{
+		isTool:true, tool:"local.exec", status:"running",
+	}}}
+	model.handleLocalOperation(map[string]any{
+		"approval":"not_required",
+		"status":"denied",
+		"command":"local.exec sudo id",
+		"exitCode":-1,
+		"message":"privilege escalation is not allowed",
+	})
+	if len(model.transcript) != 1 || model.transcript[0].status != "denied" {
+		t.Fatalf("expected denial to update the running tool entry, got %#v", model.transcript)
+	}
+}
+
+func TestChatInputSupportsRuneAwareEditing(t *testing.T) {
+	model := Model{screen:screenChat, input:"a界c", cursor:2}
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyLeft})
+	if model.cursor != 1 { t.Fatalf("expected cursor at rune 1, got %d", model.cursor) }
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune{"🙂"[0]}})
+	if model.input != "a🙂界c" || model.cursor != 2 {
+		t.Fatalf("unexpected rune insertion: input=%q cursor=%d", model.input, model.cursor)
+	}
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyBackspace})
+	if model.input != "a界c" || model.cursor != 1 {
+		t.Fatalf("unexpected backspace: input=%q cursor=%d", model.input, model.cursor)
+	}
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyEnd})
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune{"!"}})
+	if model.input != "a界c!" { t.Fatalf("unexpected end insertion: %q", model.input) }
+}
+
+func TestChatInputSupportsMultilinePrompt(t *testing.T) {
+	model := Model{screen:screenChat, input:"first", cursor:5}
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyCtrlJ})
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune("second")})
+	if model.input != "first\\nsecond" { t.Fatalf("expected multiline input, got %q", model.input) }
+}
+
+func TestTranscriptCanScrollOlderAndReturnToLatest(t *testing.T) {
+	model := Model{screen:screenChat, height:24}
+	for i:=0; i<20; i++ {
+		model.transcript = append(model.transcript, transcriptEntry{role:"user", content:strings.Repeat("line ", 4)+string(rune('A'+i))})
+	}
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyPgUp})
+	if model.scrollOffset == 0 { t.Fatal("expected PageUp to scroll transcript") }
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyEnd, Alt:true})
+	if model.scrollOffset != 0 { t.Fatalf("expected Alt+End to return to latest, got %d", model.scrollOffset) }
+}

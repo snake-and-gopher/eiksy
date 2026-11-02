@@ -230,6 +230,15 @@ func (m *Model) restorePendingApproval() {
 		if request.ID != pending.RequestID || request.Target != "local" {
 			continue
 		}
+		if pending.UserMessage != "" {
+			hasUserMessage := false
+			for i := len(m.transcript)-1; i >= 0; i-- {
+				if m.transcript[i].isTool { continue }
+				if m.transcript[i].role == "user" && m.transcript[i].content == pending.UserMessage { hasUserMessage = true }
+				break
+			}
+			if !hasUserMessage { m.transcript = append(m.transcript, transcriptEntry{role:"user", content:pending.UserMessage}) }
+		}
 		m.approval = &agentai.ApprovalRequest{
 			RequestID: request.ID,
 			ToolID:    request.ToolID,

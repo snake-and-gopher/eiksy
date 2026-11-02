@@ -26,9 +26,11 @@ func configureCommand(cmd *exec.Cmd) (func(), error) {
 }
 
 func newRestrictedToken() (windows.Token, error) {
-	current, err := windows.OpenProcessToken(
+	var current windows.Token
+	err := windows.OpenProcessToken(
 		windows.CurrentProcess(),
 		windows.TOKEN_DUPLICATE|windows.TOKEN_QUERY|windows.TOKEN_ASSIGN_PRIMARY,
+		&current,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("open current process token: %w", err)

@@ -389,3 +389,19 @@ func TestChatInputSupportsCursorEditingAndMultiline(t *testing.T) {
 	_, _ = model.updateChatKey(tea.KeyMsg{Type:tea.KeyBackspace})
 	if model.input != "aXb" || model.cursor != 2 { t.Fatalf("expected backspace at cursor, input=%q cursor=%d",model.input,model.cursor) }
 }
+
+
+func TestAgentErrorMarksRunningToolAsFailed(t *testing.T) {
+	model := Model{screen:screenChat, running:true}
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolStarted,Tool:"local.exec",ToolCallID:"failed-call"})
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventError,Err:errors.New("provider request failed")})
+	if model.transcript[0].status != "failed" { t.Fatalf("expected failed tool status, got %q",model.transcript[0].status) }
+	if model.running { t.Fatal("expected agent to stop after error") }
+}
+
+func TestCancellationMarksRunningToolAsCancelled(t *testing.T) {
+	model := Model{screen:screenChat, running:true}
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolStarted,Tool:"local.exec",ToolCallID:"cancelled-call"})
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventCancellation})
+	if model.transcript[0].status != "cancelled" { t.Fatalf("expected cancelled tool status, got %q",model.transcript[0].status) }
+}

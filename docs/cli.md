@@ -64,7 +64,9 @@ The local agent has a dedicated tool set:
 - **local.file.write** — write a local file;
 - **local.file.list** — list a local directory.
 
-All operations run as the operating-system user who launched the CLI and are constrained by that user's permissions. The CLI never opens SSH connections, creates remote sessions, uses SFTP, invokes privilege elevation, or treats the local host as an SSH session.
+All operations run as the operating-system user who launched the CLI and are constrained by that user's permissions. The CLI never opens SSH connections, creates remote sessions, uses SFTP, or treats the local host as an SSH session.
+
+The local execution boundary also enforces no-elevation restrictions: on Linux, the local-agent process sets `PR_SET_NO_NEW_PRIVS`, which is inherited by its child processes and prevents setuid/setgid binaries and file capabilities from granting additional privileges. On Windows, each command runs with a restricted token that disables the built-in Administrators group and removes enabled privileges. Direct privilege-launcher commands such as `sudo`, `doas`, `runas` and `pkexec` are denied by policy. Platforms without a supported restriction fail closed instead of silently running unrestricted commands.
 
 Command Policy evaluates local operations separately from SSH policy. When approval is required, the requested operation is shown in the conversation. File writes include the target path, byte count, SHA-256 fingerprint and a bounded content preview so you can inspect what will be written before approving:
 

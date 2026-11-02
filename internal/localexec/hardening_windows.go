@@ -17,8 +17,10 @@ func HardenProcess() error {
 		return fmt.Errorf("open current process token: %w", err)
 	}
 	defer token.Close()
-	if token.IsElevated() {
-		return fmt.Errorf("eiksy-cli must be started without Run as administrator; elevated parent processes are not supported")
-	}
+	return requireUnelevatedToken(token.IsElevated())
+}
+
+func requireUnelevatedToken(elevated bool) error {
+	if elevated { return fmt.Errorf("eiksy-cli must be started without Run as administrator; elevated parent processes are not supported") }
 	return nil
 }

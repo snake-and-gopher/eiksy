@@ -98,6 +98,39 @@ func commandToolRegistry() []AITool {
 	}
 }
 
+// localAgentToolRegistry exposes only local-host capabilities. It intentionally
+// contains no session identifiers and no SSH/SFTP operations.
+func localAgentToolRegistry() []AITool {
+	return []AITool{
+		{Name: "local.exec", Description: "Execute one command on the local host as the current operating-system user. Command Policy applies and approval may be required.", Parameters: map[string]any{
+			"type":"object", "properties":map[string]any{
+				"command":map[string]any{"type":"string","description":"One local shell command. Do not combine commands with shell operators."},
+				"reason":map[string]any{"type":"string","description":"Why this command is needed."},
+			}, "required":[]string{"command"}, "additionalProperties":false,
+		}},
+		{Name: "local.file.read", Description: "Read a bounded UTF-8 text file from the local host. Subject to local-files policy.", Parameters: map[string]any{
+			"type":"object", "properties":map[string]any{"path":map[string]any{"type":"string","description":"Path relative to the CLI working directory or an absolute path."}}, "required":[]string{"path"}, "additionalProperties":false,
+		}},
+		{Name: "local.file.write", Description: "Create or overwrite a local file with UTF-8 content. This operation requires user approval unless an explicit local policy rule allows it.", Parameters: map[string]any{
+			"type":"object", "properties":map[string]any{"path":map[string]any{"type":"string"},"content":map[string]any{"type":"string"},"reason":map[string]any{"type":"string"}}, "required":[]string{"path","content"}, "additionalProperties":false,
+		}},
+		{Name: "local.file.list", Description: "List a local directory, bounded to 256 entries. Subject to local-files policy.", Parameters: map[string]any{
+			"type":"object", "properties":map[string]any{"path":map[string]any{"type":"string","description":"Directory path relative to the CLI working directory or an absolute path."}}, "required":[]string{"path"}, "additionalProperties":false,
+		}},
+	}
+}
+
+func openAILocalToolDefinitions() []map[string]any {
+	registry := localAgentToolRegistry()
+	tools := make([]map[string]any, 0, len(registry))
+	for _, tool := range registry {
+		tools = append(tools, map[string]any{"type":"function","function":map[string]any{
+			"name":tool.Name,"description":tool.Description,"parameters":tool.Parameters,
+		}})
+	}
+	return tools
+}
+
 // openAIToolDefinitions converts the internal registry into the OpenAI
 // compatible tools representation used by Ollama/llama-server and compatible
 // local providers.

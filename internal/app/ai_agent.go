@@ -16,11 +16,18 @@ import (
 // frontend-neutral events.
 type AIBackendAgent struct {
 	service *Service
+	target string
 }
 
 // NewAIBackendAgent returns an Agent backed by the existing Eiksy AI service.
 func NewAIBackendAgent(service *Service) agentai.Agent {
-	return &AIBackendAgent{service: service}
+	return &AIBackendAgent{service: service, target: commandTargetSSH}
+}
+
+// NewLocalAIBackendAgent returns an agent restricted to local-host tools.
+// The supplied session identifier is intentionally ignored by this agent.
+func NewLocalAIBackendAgent(service *Service) agentai.Agent {
+	return &AIBackendAgent{service: service, target: commandTargetLocal}
 }
 
 func (a *AIBackendAgent) Run(ctx context.Context, sessionID string, input string) (<-chan agentai.Event, error) {
@@ -50,17 +57,22 @@ func (a *AIBackendAgent) run(ctx context.Context, events chan<- agentai.Event, s
 		return
 	}
 
+	target := normalizeCommandTarget(a.target)
+	if target == commandTargetLocal { sessionID = "" }
 	tools := []map[string]any(nil)
-	if commandToolEnabled(state.CommandPolicy, nativeSSHExecPolicyToolID) || commandToolEnabled(state.CommandPolicy, "sftp") {
+	if target == commandTargetLocal {
+		if commandToolEnabled(state.CommandPolicy, nativeLocalShellPolicyToolID) || commandToolEnabled(state.CommandPolicy, nativeLocalFilesPolicyToolID) { tools = openAILocalToolDefinitions() }
+	} else if commandToolEnabled(state.CommandPolicy, nativeSSHExecPolicyToolID) || commandToolEnabled(state.CommandPolicy, "sftp") {
 		tools = openAIToolDefinitions()
 	}
-	messages := a.service.nativeMessagesFromState(state, sessionID)
+	messages := a.service.nativeMessagesFromStateForTarget(state, target, sessionID)
 	messages = append(messages, nativeChatMessage{Role: "user", Content: input})
-	reply, _, err := a.service.runNativeToolLoopWithEvents(
+	reply, _, err := a.service.runNativeToolLoopWithTargetEvents(
 		ctx,
 		provider,
 		state.ChatSessionID,
 		state.CommandPolicy,
+		target,
 		sessionID,
 		input,
 		messages,

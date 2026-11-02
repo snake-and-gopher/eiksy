@@ -22,6 +22,7 @@ const (
 type ApprovalRequest struct {
 	RequestID string
 	ToolID    string
+	Target    string
 	SessionID string
 	Command   string
 	Reason    string

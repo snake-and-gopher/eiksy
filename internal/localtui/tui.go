@@ -920,7 +920,7 @@ func (m Model) View() string {
 		fmt.Fprintf(&body, "%sAPI token: %s\n", fieldMarker(m.configField, 2), masked(m.cloudToken))
 		body.WriteString("\nTab/↑/↓ change field · Ctrl+L load models · Ctrl+S save · Esc cancel")
 		if len(m.modelChoices) > 0 {
-			body.WriteString("\n\nModels: " + safeTerminalText(strings.Join(m.modelChoices, ", ")))
+			body.WriteString("\n\nModels: " + safeTerminalLine(strings.Join(m.modelChoices, ", ")))
 		}
 	case screenLocalConfig:
 		provider := m.currentProvider()

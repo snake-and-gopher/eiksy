@@ -329,3 +329,63 @@ func TestTranscriptCanScrollOlderAndReturnToLatest(t *testing.T) {
 	model.updateChatKey(tea.KeyMsg{Type:tea.KeyEnd, Alt:true})
 	if model.scrollOffset != 0 { t.Fatalf("expected Alt+End to return to latest, got %d", model.scrollOffset) }
 }
+
+
+func TestLocalOperationEventBeforeToolStartIsCorrelatedWithoutDuplicate(t *testing.T) {
+	model := Model{screen:screenChat}
+	payload := map[string]any{
+		"toolCallId":"call-123", "approval":"required", "status":"approval_required",
+		"command":"local.exec printf hello", "message":"approval required", "exitCode":-1,
+	}
+	model.handleLocalOperation(payload)
+	if len(model.transcript) != 0 { t.Fatalf("expected out-of-order event to be queued, got %#v", model.transcript) }
+
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolStarted, Tool:"local.exec", ToolCallID:"call-123"})
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolOutput, Tool:"local.exec", ToolCallID:"call-123", Content:`{"status":"approval_required","requestId":"request-1"}`})
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventApprovalRequired, Tool:"local.exec", ToolCallID:"call-123", Approval:&agentai.ApprovalRequest{RequestID:"request-1",ToolID:"local-shell",Command:"printf hello"}})
+
+	if len(model.transcript) != 1 { t.Fatalf("expected one correlated tool entry, got %#v", model.transcript) }
+	entry := model.transcript[0]
+	if entry.toolCallID != "call-123" || entry.command != "local.exec printf hello" { t.Fatalf("tool event correlation was lost: %#v", entry) }
+	if entry.status != "approval_required" || !strings.Contains(entry.output, "local.exec printf hello") { t.Fatalf("expected command and approval state in transcript, got %#v", entry) }
+}
+
+func TestApprovedOperationResultIsNotOverwrittenByApprovalCompletion(t *testing.T) {
+	model := Model{screen:screenChat, transcript:[]transcriptEntry{{
+		isTool:true, tool:"local.exec", toolCallID:"call-456", command:"local.exec printf hello",
+		status:"approval_required", output:"approval required",
+	}}}
+	updated, _ := model.Update(agentApprovalDone{mode:domainai.CommandPermissionModeNow})
+	model = updated.(Model)
+	model.handleLocalOperation(map[string]any{
+		"toolCallId":"call-456", "approval":"now", "status":"executed",
+		"command":"local.exec printf hello", "stdout":"hello", "stderr":"", "exitCode":0, "durationMs":7,
+	})
+	if len(model.transcript) != 1 { t.Fatalf("expected one tool transcript entry, got %#v", model.transcript) }
+	entry := model.transcript[0]
+	if entry.status != "executed" { t.Fatalf("expected execution result status, got %q", entry.status) }
+	for _, expected := range []string{"Command: local.exec printf hello","Exit code: 0","stdout:","hello"} {
+		if !strings.Contains(entry.output, expected) { t.Fatalf("expected %q in operation output %q", expected, entry.output) }
+	}
+}
+
+func TestToolOutputIsRenderedAsReadableCommandResult(t *testing.T) {
+	model := Model{screen:screenChat}
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolStarted,Tool:"local.exec",ToolCallID:"call-789"})
+	model.handleAgentEvent(agentai.Event{Type:agentai.EventToolOutput,Tool:"local.exec",ToolCallID:"call-789",Content:`{"status":"executed","command":"local.exec pwd","result":{"stdout":"/workspace","stderr":"","exitCode":0,"durationMs":3}}`})
+	if len(model.transcript) != 1 { t.Fatalf("expected one tool entry, got %#v", model.transcript) }
+	output := model.transcript[0].output
+	for _, expected := range []string{"Command: local.exec pwd","Exit code: 0","stdout:","/workspace"} {
+		if !strings.Contains(output, expected) { t.Fatalf("expected %q in output %q", expected, output) }
+	}
+}
+
+func TestChatInputSupportsCursorEditingAndMultiline(t *testing.T) {
+	model := Model{screen:screenChat,input:"ab",cursor:1}
+	_, _ = model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes,Runes:[]rune("X")})
+	if model.input != "aXb" || model.cursor != 2 { t.Fatalf("expected insertion at cursor, input=%q cursor=%d",model.input,model.cursor) }
+	_, _ = model.updateChatKey(tea.KeyMsg{Type:tea.KeyCtrlJ})
+	if model.input != "aX\nb" || model.cursor != 3 { t.Fatalf("expected multiline insertion, input=%q cursor=%d",model.input,model.cursor) }
+	_, _ = model.updateChatKey(tea.KeyMsg{Type:tea.KeyBackspace})
+	if model.input != "aXb" || model.cursor != 2 { t.Fatalf("expected backspace at cursor, input=%q cursor=%d",model.input,model.cursor) }
+}

@@ -272,7 +272,7 @@ func TestLocalOperationWithoutApprovalUpdatesExistingToolTranscript(t *testing.T
 	if entry.status != "executed" {
 		t.Fatalf("expected executed status, got %q", entry.status)
 	}
-	for _, want := range []string{"local.exec pwd", "/workspace", "exitCode", "durationMs"} {
+	for _, want := range []string{"Command: local.exec pwd", "/workspace", "Exit code", "Duration"} {
 		if !strings.Contains(entry.output, want) {
 			t.Fatalf("expected operation output to contain %q, got %q", want, entry.output)
 		}

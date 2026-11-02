@@ -9,7 +9,15 @@ import (
 )
 
 func TestWindowsLocalAgentRejectsElevatedParentAndCreatesRestrictedToken(t *testing.T) {
-	if err := HardenProcess(); err != nil { t.Fatalf("HardenProcess() error = %v", err) }
+	if err := requireUnelevatedToken(true); err == nil { t.Fatal("expected elevated parent token to be rejected") }
+	if err := requireUnelevatedToken(false); err != nil { t.Fatalf("unelevated parent token rejected: %v", err) }
+
+	current, err := windows.OpenCurrentProcessToken()
+	if err != nil { t.Fatalf("OpenCurrentProcessToken() error = %v", err) }
+	elevated := current.IsElevated()
+	_ = current.Close()
+	if err := HardenProcess(); elevated && err == nil { t.Fatal("HardenProcess() accepted an elevated parent token") } else if !elevated && err != nil { t.Fatalf("HardenProcess() rejected an unelevated parent token: %v", err) }
+
 	token, err := newRestrictedToken()
 	if err != nil {
 		t.Fatalf("newRestrictedToken() error = %v", err)

@@ -339,6 +339,22 @@ func TestCallNativeToolCompletionParsesToolCall(t *testing.T) {
 	if result.ToolCalls[0].Function.Name != nativeSSHExecToolName { t.Fatalf("expected ssh.exec, got %q", result.ToolCalls[0].Function.Name) }
 }
 
+func TestDispatchNativeToolCallAutoApprovesAskDecision(t *testing.T) {
+	store := memory.NewStore()
+	ssh := &nativeTestSSHManager{}
+	store.OpenRuntimeTab(workspace.Tab{ID: "session-1", ProtocolID: "ssh", Status: "connected"})
+	service := NewService(store, ssh, nil)
+	call := nativeToolCall{ID: "call-auto", Type: "function"}
+	call.Function.Name = nativeSSHExecToolName
+	call.Function.Arguments = `{"sessionId":"session-1","command":"uname -a"}`
+	policy := ai.CommandPolicy{AutoApprove: true, Tools: []ai.CommandTool{{ID: nativeSSHExecPolicyToolID, Enabled: true}}}
+	result, pending, err := service.dispatchNativeToolCall(call, policy, "session-1", "provider-1", "inspect", nil)
+	if err != nil { t.Fatalf("dispatch returned unexpected error: %v", err) }
+	if pending { t.Fatal("auto-approve must not create a pending request") }
+	if !strings.Contains(result, `"status":"executed"`) { t.Fatalf("expected executed result, got %q", result) }
+	if len(ssh.commands) != 1 || ssh.commands[0] != "session-1:uname -a\\n" { t.Fatalf("expected command to execute once, got %#v", ssh.commands) }
+}
+
 func TestDispatchNativeToolCallRejectsDifferentSession(t *testing.T) {
 	service := NewService(memory.NewStore(), nil, nil)
 	call := nativeToolCall{ID: "call-1", Type: "function"}

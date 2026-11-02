@@ -160,7 +160,24 @@ export namespace ai {
 	        this.configured = source["configured"];
 	    }
 	}
+	export class AgentSkill {
+	    id: string;
+	    name: string;
+	    description: string;
+	    instructions: string;
+	    enabled: boolean;
+	    static createFrom(source: any = {}) { return new AgentSkill(source); }
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.instructions = source["instructions"];
+	        this.enabled = Boolean(source["enabled"]);
+	    }
+	}
 	export class WorkspaceState {
+	    agentSkills: AgentSkill[];
 	    providers: ProviderDescriptor[];
 	    contextPolicy: ContextPolicy;
 	    commandPolicy: CommandPolicy;
@@ -174,6 +191,7 @@ export namespace ai {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.agentSkills = this.convertValues(source["agentSkills"], AgentSkill) ?? [];
 	        this.providers = this.convertValues(source["providers"], ProviderDescriptor);
 	        this.contextPolicy = this.convertValues(source["contextPolicy"], ContextPolicy);
 	        this.commandPolicy = this.convertValues(source["commandPolicy"], CommandPolicy);

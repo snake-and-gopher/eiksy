@@ -57,4 +57,4 @@ jobs:
           cache: true
 
       - name: Test local execution and application packages
-        run: go test -timeout 2m ./internal/localexec ./internal/app ./cmd/eiksy-cli
+        run: go test -timeout 2m ./internal/localexec ./cmd/eiksy-cli

@@ -168,7 +168,8 @@ func LocalApprovalPreview(toolName, arguments string) string {
 		runes := []rune(args.Content)
 		preview := string(runes)
 		if len(runes) > 600 { preview = string(runes[:600]) + "\n[preview truncated]" }
-		return fmt.Sprintf("File: %q\nContent size: %d bytes\nContent preview:\n%s", args.Path, len([]byte(args.Content)), preview)
+		fingerprint := strings.TrimPrefix(localPolicyCommand(nativeLocalFileWriteToolName, args.Path, args.Content), "local.file.write:sha256:")
+		return fmt.Sprintf("File: %q\nContent size: %d bytes\nSHA-256: %s\nContent preview:\n%s", args.Path, len([]byte(args.Content)), fingerprint, preview)
 	default:
 		return ""
 	}

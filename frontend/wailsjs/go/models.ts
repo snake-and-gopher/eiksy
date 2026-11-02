@@ -91,6 +91,7 @@ export namespace ai {
 	    }
 	}
 	export class CommandPolicy {
+	    autoApprove: boolean;
 	    tools: CommandTool[];
 	    commandRules: CommandRule[];
 	    pendingRequests: CommandRequest[];
@@ -102,6 +103,7 @@ export namespace ai {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.autoApprove = Boolean(source["autoApprove"]);
 	        this.tools = this.convertValues(source["tools"], CommandTool);
 	        this.commandRules = this.convertValues(source["commandRules"], CommandRule);
 	        this.pendingRequests = this.convertValues(source["pendingRequests"], CommandRequest);

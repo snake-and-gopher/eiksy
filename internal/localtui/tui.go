@@ -866,7 +866,7 @@ func (m *Model) startAgent(value string, appendUser bool) tea.Cmd {
 func (m *Model) handleSlashCommand(value string) tea.Cmd {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "/help":
-		m.transcript = append(m.transcript, transcriptEntry{role:"system", content:"Commands: /provider — configure an AI provider; /help — show help; /quit — exit."})
+		m.transcript = append(m.transcript, transcriptEntry{role:"system", content:"Commands: /provider — configure an AI provider; /help — show help; /quit — exit. Ctrl+J inserts a new line; PgUp/PgDn scroll the transcript."})
 	case "/provider":
 		m.refreshProviders()
 		m.screen = screenProviderMenu
@@ -1067,7 +1067,7 @@ func (m Model) View() string {
 	}
 	body.WriteString("\n\n")
 	body.WriteString(muted.Render(safeTerminalLine(m.status)))
-	footer := muted.Render("\nEnter send/confirm · /provider configure model · /help commands · Ctrl+C exit")
+	footer := muted.Render("\nEnter send · Ctrl+J new line · PgUp/PgDn scroll · /provider configure model · Ctrl+C exit")
 	return panel.Render(body.String()+footer)
 }
 

@@ -142,6 +142,10 @@ export function UpdateCommandPolicy(arg1) {
   return window['go']['main']['App']['UpdateCommandPolicy'](arg1);
 }
 
+export function UpdateAgentSkills(arg1) {
+  return window['go']['main']['App']['UpdateAgentSkills'](arg1);
+}
+
 export function ResolveCommandPolicyRequest(arg1, arg2) {
   return window['go']['main']['App']['ResolveCommandPolicyRequest'](arg1, arg2);
 }

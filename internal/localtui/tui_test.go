@@ -138,7 +138,7 @@ func TestPendingApprovalIsRestoredIntoTranscript(t *testing.T) {
 	backend := &fakeBackend{status:securestorage.Status{Available:true,Configured:true,Unlocked:true}}
 	backend.state.AI.AgentMessages = []domainai.ChatMessage{{Role:"assistant",Content:"Earlier answer."}}
 	backend.state.AI.PendingNativeToolCall = &domainai.PendingNativeToolCall{
-		Target:"local", RequestID:"pending-1", ToolName:"local.file.write", ToolArguments:`{"path":"/tmp/example.txt","content":"write this exact content"}`,
+		Target:"local", RequestID:"pending-1", ToolName:"local.file.write", UserMessage:"write the file", ToolArguments:`{"path":"/tmp/example.txt","content":"write this exact content"}`,
 	}
 	backend.state.AI.CommandPolicy.PendingRequests = []domainai.CommandRequest{{
 		Target:"local", ID:"pending-1", ToolID:"local-files", Command:"/tmp/example.txt",
@@ -146,8 +146,8 @@ func TestPendingApprovalIsRestoredIntoTranscript(t *testing.T) {
 	model := NewModelWithBackend(backend, &fakeAgent{})
 	if model.approval == nil { t.Fatal("expected pending approval to be restored") }
 	if !strings.Contains(model.approval.Preview, "write this exact content") { t.Fatalf("expected the write content preview to be restored, got %q", model.approval.Preview) }
-	if len(model.transcript) != 2 || !model.transcript[1].isTool { t.Fatalf("expected pending operation in transcript, got %#v", model.transcript) }
-	if !strings.Contains(model.transcript[1].output, "approval_required") { t.Fatalf("expected pending status in transcript, got %q", model.transcript[1].output) }
+	if len(model.transcript) != 3 || model.transcript[1].role != "user" || model.transcript[1].content != "write the file" || !model.transcript[2].isTool { t.Fatalf("expected pending user prompt followed by operation in transcript, got %#v", model.transcript) }
+	if !strings.Contains(model.transcript[2].output, "approval_required") { t.Fatalf("expected pending status in transcript, got %q", model.transcript[2].output) }
 }
 
 func TestAgentAutomaticallyRetriesPromptAfterSecureStorageUnlock(t *testing.T) {

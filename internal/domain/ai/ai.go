@@ -67,6 +67,7 @@ type CommandRequest struct {
 	ToolID      string `json:"toolId"`
 	SessionID   string `json:"sessionId"`
 	Command     string `json:"command"`
+	PolicyCommand string `json:"policyCommand,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 	RequestedAt string `json:"requestedAt"`
 }

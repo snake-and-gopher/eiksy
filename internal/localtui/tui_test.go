@@ -299,7 +299,7 @@ func TestChatInputSupportsRuneAwareEditing(t *testing.T) {
 	model := Model{screen:screenChat, input:"a界c", cursor:2}
 	model.updateChatKey(tea.KeyMsg{Type:tea.KeyLeft})
 	if model.cursor != 1 { t.Fatalf("expected cursor at rune 1, got %d", model.cursor) }
-	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune{"🙂"[0]}})
+	model.updateChatKey(tea.KeyMsg{Type:tea.KeyRunes, Runes:[]rune("🙂")})
 	if model.input != "a🙂界c" || model.cursor != 2 {
 		t.Fatalf("unexpected rune insertion: input=%q cursor=%d", model.input, model.cursor)
 	}

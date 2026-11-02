@@ -48,9 +48,11 @@ func TestLocalFileWriteExecutesOnlyWhenLocalPolicyAllows(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	target := filepath.Join(t.TempDir(), "allowed.txt")
 	state := service.store.AIState()
-	state.CommandPolicy.CommandRules = []domainai.CommandRule{{Target:commandTargetLocal,ToolID:nativeLocalFilesPolicyToolID,Pattern:target,Action:domainai.CommandPermissionAllow}}
+	content := "approved by policy"
+	policyCommand := localPolicyCommand(nativeLocalFileWriteToolName, target, content)
+	state.CommandPolicy.CommandRules = []domainai.CommandRule{{Target:commandTargetLocal,ToolID:nativeLocalFilesPolicyToolID,Pattern:policyCommand,Action:domainai.CommandPermissionAllow}}
 	if err := service.store.UpdateAIState(state); err != nil { t.Fatal(err) }
-	call := localCall(nativeLocalFileWriteToolName, `{"path":`+mustJSON(t,target)+`,"content":"approved by policy"}`)
+	call := localCall(nativeLocalFileWriteToolName, `{"path":`+mustJSON(t,target)+`,"content":`+mustJSON(t,content)+`}`)
 	result, pending, err := service.dispatchLocalToolCall(context.Background(), call, state.CommandPolicy, "provider-1", "write a file", nil)
 	if err != nil { t.Fatalf("dispatch local write: %v", err) }
 	if pending { t.Fatalf("unexpected approval: %s", result) }
@@ -140,4 +142,14 @@ func TestLocalApprovalPreviewBoundsFileWriteContent(t *testing.T) {
 	}
 	if !strings.Contains(preview, "[preview truncated]") { t.Fatalf("expected bounded preview marker, got %q", preview) }
 	if strings.Contains(preview, strings.Repeat("ж", 700)) { t.Fatal("preview should not expose the entire large file content") }
+}
+
+func TestLocalPolicyCommandScopesFileWritesByContent(t *testing.T) {
+	first := localPolicyCommand(nativeLocalFileWriteToolName, "/tmp/report.txt", "approved content")
+	same := localPolicyCommand(nativeLocalFileWriteToolName, "/tmp/report.txt", "approved content")
+	changed := localPolicyCommand(nativeLocalFileWriteToolName, "/tmp/report.txt", "different content")
+	otherPath := localPolicyCommand(nativeLocalFileWriteToolName, "/tmp/other.txt", "approved content")
+	if first != same { t.Fatal("identical writes must have the same policy key") }
+	if first == changed { t.Fatal("changing file content must require a new approval policy key") }
+	if first == otherPath { t.Fatal("changing the target path must require a new approval policy key") }
 }

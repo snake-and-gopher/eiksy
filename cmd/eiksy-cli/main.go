@@ -9,6 +9,7 @@ import (
 	"eiksy/internal/app"
 	"eiksy/internal/cli"
 	"eiksy/internal/localtui"
+	"eiksy/internal/localexec"
 	"eiksy/internal/storage/disk"
 )
 
@@ -39,6 +40,9 @@ func resolveReleaseVersion() string {
 }
 
 func newBackend() (*app.Service, error) {
+	if err := localexec.HardenProcess(); err != nil {
+		return nil, fmt.Errorf("harden local execution: %w", err)
+	}
 	store, err := disk.NewStore()
 	if err != nil {
 		return nil, fmt.Errorf("initialize storage: %w", err)

@@ -87,7 +87,7 @@ func (e *Executor) Run(ctx context.Context, command string) (Result, error) {
 	cmd.Stderr = stderr
 
 	started := time.Now()
-	err := cmd.Run()
+	err = cmd.Run()
 	result := Result{
 		Command:   command,
 		Stdout:    stdout.String(),

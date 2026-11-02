@@ -52,8 +52,10 @@ type chatMessage struct {
 type transcriptEntry struct {
 	role    string
 	content string
-	tool    string
-	status  string
+	tool       string
+	toolCallID string
+	command    string
+	status     string
 	output  string
 	isTool  bool
 }
@@ -84,6 +86,8 @@ type Model struct {
 	cancel  context.CancelFunc
 
 	width, height int
+	cursor        int
+	scrollOffset  int
 	screen        screen
 	resumeScreen  screen
 	status        string
@@ -98,6 +102,7 @@ type Model struct {
 
 	messages      []chatMessage
 	transcript    []transcriptEntry
+	pendingOperationEvents []map[string]any
 	historyLoaded bool
 	approval      *agentai.ApprovalRequest
 	resolving bool
@@ -256,7 +261,7 @@ func (m *Model) restorePendingApproval() {
 		}
 		if !hasTranscriptEntry {
 			output, _ := json.Marshal(map[string]string{"status":"approval_required","operation":pending.ToolName,"command":request.Command})
-			m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:pending.ToolName, status:"approval_required", output:prettyToolOutput(string(output))})
+			m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:pending.ToolName, toolCallID:pending.ToolCallID, command:request.Command, status:"approval_required", output:prettyToolOutput(string(output))})
 		}
 		m.status = "A local operation is waiting for your approval."
 		return
@@ -273,7 +278,12 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleAgentEvent(msg.event)
 		return m, waitAgentEvent(msg.events)
 	case agentStreamClosed:
-		m.running = false
+		if m.running {
+			m.running = false
+			m.currentPrompt = ""
+			m.setActiveToolStatus("interrupted")
+			m.status = "Agent stream closed unexpectedly."
+		}
 	case localOperationEvent:
 		m.handleLocalOperation(msg.payload)
 	case secureStorageUnlocked:
@@ -308,12 +318,6 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.resolving = false
 		m.retryApproval = false
 		m.approval = nil
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
-			if entry.status == "approval_required" || entry.status == "running" {
-				if msg.mode == domainai.CommandPermissionModeDeny { entry.status = "denied" } else { entry.status = "finished" }
-			}
-		}
 		m.appendNewPersistedMessages()
 		m.restorePendingApproval()
 		lastToolStatus := ""
@@ -382,31 +386,63 @@ func waitAgentEvent(events <-chan agentai.Event) tea.Cmd {
 }
 
 func (m *Model) handleLocalOperation(payload map[string]any) {
-	approval, _ := payload["approval"].(string)
-	if approval == "not_required" { return }
-	encoded, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil { return }
+	if m.applyLocalOperation(payload) { return }
+	// Runtime notifications and agent events use separate channels. Queue an
+	// unmatched notification until the corresponding tool-start event arrives.
+	if len(m.pendingOperationEvents) >= 32 {
+		m.pendingOperationEvents = m.pendingOperationEvents[1:]
+	}
+	m.pendingOperationEvents = append(m.pendingOperationEvents, payload)
+}
+
+func (m *Model) applyLocalOperation(payload map[string]any) bool {
 	command, _ := payload["command"].(string)
 	tool := strings.TrimSpace(strings.SplitN(command, " ", 2)[0])
+	toolCallID, _ := payload["toolCallId"].(string)
 	status, _ := payload["status"].(string)
 
 	for i := len(m.transcript)-1; i >= 0; i-- {
 		entry := &m.transcript[i]
 		if !entry.isTool { continue }
-		pendingOutput := strings.Contains(entry.output, "approval_required")
-		if approval == "required" {
-			if entry.status != "running" && entry.status != "approval_required" { break }
-		} else if entry.status != "approval_required" && !pendingOutput {
-			continue
-		}
+		if toolCallID != "" && entry.toolCallID != toolCallID { continue }
+		if toolCallID == "" && tool != "" && entry.tool != tool { continue }
+		if toolCallID == "" && entry.status != "running" && entry.status != "approval_required" && entry.command != command { continue }
 		if tool != "" { entry.tool = tool }
+		entry.toolCallID = toolCallID
+		entry.command = command
 		entry.status = status
-		entry.output = truncateDisplay(string(encoded), 2400)
+		entry.output = formatLocalOperationOutput(payload)
+		m.scrollOffset = 0
 		if statusText := localOperationStatus(status); statusText != "" { m.status = statusText }
-		return
+		return true
 	}
-	m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:tool, status:status, output:truncateDisplay(string(encoded),2400)})
-	m.status = localOperationStatus(status)
+	return false
+}
+
+func formatLocalOperationOutput(payload map[string]any) string {
+	var output strings.Builder
+	command, _ := payload["command"].(string)
+	if command != "" { fmt.Fprintf(&output, "Command: %s\n", safeTerminalLine(command)) }
+	if status, _ := payload["status"].(string); status != "" { fmt.Fprintf(&output, "Status: %s\n", safeTerminalLine(status)) }
+	if exitCode, ok := payload["exitCode"]; ok { fmt.Fprintf(&output, "Exit code: %v\n", exitCode) }
+	if duration, ok := payload["durationMs"]; ok { fmt.Fprintf(&output, "Duration: %v ms\n", duration) }
+	if message, _ := payload["message"].(string); strings.TrimSpace(message) != "" { fmt.Fprintf(&output, "Message: %s\n", safeTerminalLine(message)) }
+	if errText, _ := payload["error"].(string); strings.TrimSpace(errText) != "" { fmt.Fprintf(&output, "Error: %s\n", safeTerminalLine(errText)) }
+	if stdout, _ := payload["stdout"].(string); stdout != "" { fmt.Fprintf(&output, "\nstdout:\n%s\n", safeTerminalText(stdout)) }
+	if stderr, _ := payload["stderr"].(string); stderr != "" { fmt.Fprintf(&output, "\nstderr:\n%s\n", safeTerminalText(stderr)) }
+	return truncateDisplay(strings.TrimRight(output.String(), "\n"), 2400)
+}
+
+func formatNativeToolOutput(value string) string {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(value), &payload); err != nil { return value }
+	result, hasResult := payload["result"].(map[string]any)
+	if !hasResult { return prettyToolOutput(value) }
+	for key, item := range result { payload[key] = item }
+	if _, ok := payload["command"]; !ok {
+		if path, pathOK := payload["path"].(string); pathOK && path != "" { payload["command"] = path }
+	}
+	return formatLocalOperationOutput(payload)
 }
 
 func localOperationStatus(status string) string {
@@ -418,32 +454,64 @@ func localOperationStatus(status string) string {
 	}
 }
 
+func (m *Model) setActiveToolStatus(status string) {
+	for i := len(m.transcript)-1; i >= 0; i-- {
+		if m.transcript[i].isTool && m.transcript[i].status == "running" {
+			m.transcript[i].status = status
+			return
+		}
+	}
+}
+
 func (m *Model) handleAgentEvent(event agentai.Event) {
 	switch event.Type {
 	case agentai.EventToolStarted:
-		m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:event.Tool, status:"running"})
+		m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:event.Tool, toolCallID:event.ToolCallID, status:"running"})
+		m.scrollOffset = 0
+		if event.ToolCallID != "" {
+			for i, pending := range m.pendingOperationEvents {
+				pendingID, _ := pending["toolCallId"].(string)
+				if pendingID != event.ToolCallID { continue }
+				m.applyLocalOperation(pending)
+				m.pendingOperationEvents = append(m.pendingOperationEvents[:i], m.pendingOperationEvents[i+1:]...)
+				break
+			}
+		}
 		if len(m.transcript) > 100 { m.transcript = append([]transcriptEntry(nil), m.transcript[len(m.transcript)-100:]...) }
 	case agentai.EventToolOutput:
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
-			entry.output = truncateDisplay(prettyToolOutput(event.Content), 2400)
-			if status := nativeToolResultStatus(event.Content); status != "" { entry.status = status }
+		for i := len(m.transcript)-1; i >= 0; i-- {
+			entry := &m.transcript[i]
+			if !entry.isTool { continue }
+			if event.ToolCallID != "" && entry.toolCallID != event.ToolCallID { continue }
+			if event.ToolCallID == "" && event.Tool != "" && entry.tool != event.Tool { continue }
+			// Runtime notifications contain the command and complete process result.
+			if entry.command == "" {
+				entry.output = truncateDisplay(formatNativeToolOutput(event.Content), 2400)
+				if status := nativeToolResultStatus(event.Content); status != "" { entry.status = status }
+			}
+			break
 		}
 	case agentai.EventToolFinished:
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
+		for i := len(m.transcript)-1; i >= 0; i-- {
+			entry := &m.transcript[i]
+			if !entry.isTool { continue }
+			if event.ToolCallID != "" && entry.toolCallID != event.ToolCallID { continue }
+			if event.ToolCallID == "" && event.Tool != "" && entry.tool != event.Tool { continue }
 			if entry.status == "running" { entry.status = "finished" }
 			if event.Tool != "" { entry.tool = event.Tool }
+			break
 		}
 	case agentai.EventApprovalRequired:
 		if event.Approval != nil {
 			request := *event.Approval
 			m.approval = &request
+			m.scrollOffset = 0
 			m.status = "Approval required. Choose [Y] allow once, [A] always allow, or [N] deny."
 		}
 	case agentai.EventTextDelta:
 		if event.Content != "" {
 			if len(m.transcript) > 0 && !m.transcript[len(m.transcript)-1].isTool && m.transcript[len(m.transcript)-1].role == "assistant" { m.transcript[len(m.transcript)-1].content += event.Content } else { m.transcript = append(m.transcript, transcriptEntry{role:"assistant", content:event.Content}) }
+			m.scrollOffset = 0
 		}
 	case agentai.EventMessageFinished:
 		m.running = false
@@ -456,20 +524,24 @@ func (m *Model) handleAgentEvent(event agentai.Event) {
 	case agentai.EventError:
 		m.running = false
 		if errors.Is(event.Err, securestorage.ErrMasterPasswordRequired) {
+			m.setActiveToolStatus("waiting_for_unlock")
 			m.retryPrompt = m.currentPrompt
 			m.retryPromptNeedsAppend = false
 			m.requestUnlock(screenChat, "Secure storage locked. Enter your master password to continue.")
 			return
 		}
 		if event.Err != nil {
+			m.setActiveToolStatus("failed")
 			m.currentPrompt = ""
 			m.status = event.Err.Error()
 			m.transcript = append(m.transcript, transcriptEntry{role:"system", content:event.Err.Error()})
 		} else {
+			m.currentPrompt = ""
 			m.status = "The agent returned an unknown error."
 		}
 	case agentai.EventCancellation:
 		m.running = false
+		m.setActiveToolStatus("cancelled")
 		m.currentPrompt = ""
 		m.status = "Request cancelled."
 	}
@@ -690,6 +762,23 @@ func (m *Model) updateLocalConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyPgUp {
+		m.scrollOffset += m.transcriptPageSize()
+		return m, nil
+	}
+	if msg.Type == tea.KeyPgDown {
+		m.scrollOffset -= m.transcriptPageSize()
+		if m.scrollOffset < 0 { m.scrollOffset = 0 }
+		return m, nil
+	}
+	if msg.Type == tea.KeyHome && msg.Alt {
+		m.scrollOffset = m.maxTranscriptScroll()
+		return m, nil
+	}
+	if msg.Type == tea.KeyEnd && msg.Alt {
+		m.scrollOffset = 0
+		return m, nil
+	}
 	if m.approval != nil {
 		if m.resolving { return m, nil }
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
@@ -706,11 +795,18 @@ func (m *Model) updateChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.Type == tea.KeyEsc {
 		m.input = ""
+		m.cursor = 0
+		return m, nil
+	}
+	if msg.Type == tea.KeyCtrlJ {
+		m.input = insertAtRune(m.input, m.cursor, "\n")
+		m.cursor++
 		return m, nil
 	}
 	if msg.Type == tea.KeyEnter {
 		value := strings.TrimSpace(m.input)
 		m.input = ""
+		m.cursor = 0
 		if value == "" { return m, nil }
 		if strings.HasPrefix(value, "/") { return m, m.handleSlashCommand(value) }
 		if !m.hasConfiguredSelectedProvider() {
@@ -725,12 +821,23 @@ func (m *Model) updateChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.startAgent(value, true)
 	}
-	if msg.Type == tea.KeyBackspace {
-		m.input = removeLastRune(m.input)
-		return m, nil
-	}
-	if msg.Type == tea.KeyRunes {
-		m.input += string(msg.Runes)
+	switch msg.Type {
+	case tea.KeyBackspace:
+		m.input, m.cursor = deleteBeforeRune(m.input, m.cursor)
+	case tea.KeyDelete:
+		m.input = deleteAtRune(m.input, m.cursor)
+	case tea.KeyLeft:
+		if m.cursor > 0 { m.cursor-- }
+	case tea.KeyRight:
+		if m.cursor < len([]rune(m.input)) { m.cursor++ }
+	case tea.KeyHome:
+		m.cursor = 0
+	case tea.KeyEnd:
+		m.cursor = len([]rune(m.input))
+	case tea.KeyRunes:
+		value := string(msg.Runes)
+		m.input = insertAtRune(m.input, m.cursor, value)
+		m.cursor += len([]rune(value))
 	}
 	return m, nil
 }
@@ -739,10 +846,13 @@ func (m *Model) startAgent(value string, appendUser bool) tea.Cmd {
 	if !m.hasConfiguredSelectedProvider() {
 		m.status = "No configured AI provider. Use /provider first."
 		m.input = value
+		m.cursor = len([]rune(value))
 		return nil
 	}
 	if m.agent == nil {
 		m.status = "Local agent is unavailable."
+		m.input = value
+		m.cursor = len([]rune(value))
 		return nil
 	}
 	if appendUser { m.transcript = append(m.transcript, transcriptEntry{role:"user", content:value}) }
@@ -769,7 +879,7 @@ func (m *Model) startAgent(value string, appendUser bool) tea.Cmd {
 func (m *Model) handleSlashCommand(value string) tea.Cmd {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "/help":
-		m.transcript = append(m.transcript, transcriptEntry{role:"system", content:"Commands: /provider — configure an AI provider; /help — show help; /quit — exit."})
+		m.transcript = append(m.transcript, transcriptEntry{role:"system", content:"Commands: /provider — configure an AI provider; /help — show help; /quit — exit. Ctrl+J inserts a new line; PgUp/PgDn scroll the transcript."})
 	case "/provider":
 		m.refreshProviders()
 		m.screen = screenProviderMenu
@@ -888,7 +998,7 @@ func (m *Model) currentProvider() *domainai.ProviderDescriptor {
 
 func (m Model) View() string {
 	width := m.width
-	if width < 72 { width = 72 }
+	if width < 24 { width = 24 }
 	if width > 120 { width = 120 }
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
@@ -943,19 +1053,18 @@ func (m Model) View() string {
 			body.WriteString("Start a conversation with your local-host agent.\n")
 			body.WriteString("Use /provider to configure an OpenAI-compatible or local model.\n")
 		} else {
-			start := len(m.transcript)-18
+			lines := m.renderTranscriptLines(title)
+			visible := m.transcriptPageSize()
+			offset := m.scrollOffset
+			maxOffset := len(lines) - visible
+			if maxOffset < 0 { maxOffset = 0 }
+			if offset > maxOffset { offset = maxOffset }
+			end := len(lines) - offset
+			start := end - visible
 			if start < 0 { start = 0 }
-			for _, entry := range m.transcript[start:] {
-				if entry.isTool {
-					fmt.Fprintf(&body, "[%s] %s\n", safeTerminalLine(entry.tool), safeTerminalLine(entry.status))
-					if entry.output != "" { fmt.Fprintf(&body, "%s\n", safeTerminalText(entry.output)) }
-					body.WriteString("\n")
-					continue
-				}
-				role := strings.ToUpper(entry.role)
-				if role == "ASSISTANT" { role = "EIKSY" }
-				if role == "USER" { role = "YOU" }
-				fmt.Fprintf(&body, "%s\n%s\n\n", title.Render(safeTerminalText(role)), safeTerminalText(entry.content))
+			for _, line := range lines[start:end] { body.WriteString(line + "\n") }
+			if maxOffset > 0 {
+				if offset == 0 { body.WriteString(muted.Render("↓ latest · PgUp/PgDown scroll · Alt+Home/End jump") + "\n") } else { body.WriteString(muted.Render(fmt.Sprintf("↑ older · %d lines from latest · PgUp/PgDown scroll", offset)) + "\n") }
 			}
 		}
 		if m.approval != nil {
@@ -967,11 +1076,11 @@ func (m Model) View() string {
 			body.WriteString("\n[Y] allow once   [A] always allow exact operation   [N] deny")
 		}
 		if m.running { body.WriteString("\n\nAgent is working...") }
-		body.WriteString("\n\n> " + safeTerminalText(m.input) + "▌")
+		body.WriteString("\n\n> " + safeTerminalText(insertAtRune(m.input, m.cursor, "▌")))
 	}
 	body.WriteString("\n\n")
 	body.WriteString(muted.Render(safeTerminalLine(m.status)))
-	footer := muted.Render("\nEnter send/confirm · /provider configure model · /help commands · Ctrl+C exit")
+	footer := muted.Render("\nEnter send · Ctrl+J new line · PgUp/PgDn scroll · /provider configure model · Ctrl+C exit")
 	return panel.Render(body.String()+footer)
 }
 
@@ -1017,6 +1126,57 @@ func truncateDisplay(value string, limit int) string {
 	runes := []rune(value)
 	if len(runes) <= limit { return value }
 	return string(runes[:limit]) + "\n[display truncated]"
+}
+
+func (m Model) transcriptPageSize() int {
+	if m.height <= 0 { return 18 }
+	size := m.height - 13
+	if size < 3 { return 3 }
+	return size
+}
+
+func (m Model) maxTranscriptScroll() int {
+	lines := m.renderTranscriptLines(lipgloss.NewStyle().Bold(true))
+	max := len(lines) - m.transcriptPageSize()
+	if max < 0 { return 0 }
+	return max
+}
+
+func (m Model) renderTranscriptLines(title lipgloss.Style) []string {
+	var rendered strings.Builder
+	for _, entry := range m.transcript {
+		if entry.isTool {
+			fmt.Fprintf(&rendered, "[%s] %s\n", safeTerminalLine(entry.tool), safeTerminalLine(entry.status))
+			if entry.output != "" { fmt.Fprintf(&rendered, "%s\n", safeTerminalText(entry.output)) }
+			rendered.WriteString("\n")
+			continue
+		}
+		role := strings.ToUpper(entry.role)
+		if role == "ASSISTANT" { role = "EIKSY" }
+		if role == "USER" { role = "YOU" }
+		fmt.Fprintf(&rendered, "%s\n%s\n\n", title.Render(safeTerminalText(role)), safeTerminalText(entry.content))
+	}
+	return strings.Split(strings.TrimRight(rendered.String(), "\n"), "\n")
+}
+
+func insertAtRune(value string, index int, insert string) string {
+	runes := []rune(value)
+	if index < 0 { index = 0 }
+	if index > len(runes) { index = len(runes) }
+	return string(runes[:index]) + insert + string(runes[index:])
+}
+
+func deleteBeforeRune(value string, index int) (string, int) {
+	runes := []rune(value)
+	if index <= 0 || len(runes) == 0 { return value, 0 }
+	if index > len(runes) { index = len(runes) }
+	return string(runes[:index-1]) + string(runes[index:]), index-1
+}
+
+func deleteAtRune(value string, index int) string {
+	runes := []rune(value)
+	if index < 0 || index >= len(runes) { return value }
+	return string(runes[:index]) + string(runes[index+1:])
 }
 
 func masked(value string) string { return strings.Repeat("•", len([]rune(value))) }

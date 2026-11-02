@@ -32,8 +32,9 @@ type ApprovalRequest struct {
 type Event struct {
 	Type     EventType
 	Content  string
-	Tool     string
-	Err      error
+	Tool       string
+	ToolCallID string
+	Err        error
 	Approval *ApprovalRequest
 }
 

@@ -50,7 +50,11 @@ The local model workflow requires the corresponding local model runtime to be in
 | /help | Show available conversation commands |
 | /quit or /exit | Exit the CLI |
 | Enter | Send the current prompt |
-| Backspace | Edit the current input |
+| Left/Right, Home/End | Move the input cursor |
+| Backspace/Delete | Edit around the cursor |
+| Ctrl+J | Insert a newline in a multi-line prompt |
+| PgUp/PgDown | Scroll the conversation |
+| Alt+Home/Alt+End | Jump to oldest/latest transcript content |
 | Ctrl+C | Exit the CLI |
 
 The transcript presents user prompts, assistant responses, local tool calls, operation details, bounded results and approval outcomes in chronological order.

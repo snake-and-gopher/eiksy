@@ -102,7 +102,7 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 		messages = append(messages, nativeChatMessage{Role: "assistant", Content: response.Content, ToolCalls: response.ToolCalls})
 		for _, call := range response.ToolCalls {
 			if emitEvent != nil {
-				emitEvent(agentai.Event{Type: agentai.EventToolStarted, Tool: call.Function.Name})
+				emitEvent(agentai.Event{Type: agentai.EventToolStarted, Tool: call.Function.Name, ToolCallID: call.ID})
 			}
 			var result string
 			var pending bool
@@ -113,7 +113,7 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 				result, pending, err = s.dispatchNativeToolCall(call, toolPolicy, activeSessionID, provider.ID, userMessage, messages)
 			}
 			if emitEvent != nil && result != "" {
-				emitEvent(agentai.Event{Type: agentai.EventToolOutput, Tool: call.Function.Name, Content: result})
+				emitEvent(agentai.Event{Type: agentai.EventToolOutput, Tool: call.Function.Name, ToolCallID: call.ID, Content: result})
 			}
 			if err != nil {
 				return "", true, err
@@ -132,6 +132,7 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 							emitEvent(agentai.Event{
 								Type: agentai.EventApprovalRequired,
 								Tool: call.Function.Name,
+								ToolCallID: call.ID,
 								Approval: &agentai.ApprovalRequest{
 									RequestID: request.ID,
 									ToolID: request.ToolID,
@@ -148,7 +149,7 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 				return result, true, nil
 			}
 			if emitEvent != nil {
-				emitEvent(agentai.Event{Type: agentai.EventToolFinished, Tool: call.Function.Name})
+				emitEvent(agentai.Event{Type: agentai.EventToolFinished, Tool: call.Function.Name, ToolCallID: call.ID})
 			}
 			messages = append(messages, nativeChatMessage{Role: "tool", ToolCallID: call.ID, Content: result})
 		}
@@ -243,7 +244,7 @@ func (s *Service) callNativeToolCompletion(ctx context.Context, provider *ai.Pro
 	return payload.Choices[0].Message, nil
 }
 
-func (s *Service) emitNativeOperation(status, sessionID, command string, result sessions.CommandExecutionResult, approval, message string) {
+func (s *Service) emitNativeOperation(status, sessionID, command string, result sessions.CommandExecutionResult, approval, message string, toolCallID ...string) {
 	payload := map[string]any{
 		"status": status,
 		"sessionId": redactAuditValue(sessionID),
@@ -256,6 +257,9 @@ func (s *Service) emitNativeOperation(status, sessionID, command string, result 
 		"errorType": string(result.ErrorType),
 		"error": redactAuditValue(result.Error),
 		"message": redactAuditValue(message),
+	}
+	if len(toolCallID) > 0 && strings.TrimSpace(toolCallID[0]) != "" {
+		payload["toolCallId"] = toolCallID[0]
 	}
 	s.emitFn("agent:operate", payload)
 }

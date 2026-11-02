@@ -444,3 +444,17 @@ func TestEmitNativeOperationRedactsAndBoundsOutput(t *testing.T) {
 		t.Fatal("event stderr contains secret")
 	}
 }
+
+
+func TestEmitNativeOperationIncludesToolCallID(t *testing.T) {
+	service := NewService(memory.NewStore(), nil, nil)
+	var payload map[string]any
+	service.SetRuntimeContext(context.Background(), func(name string, data ...interface{}) {
+		if name == "agent:operate" && len(data) > 0 {
+			payload, _ = data[0].(map[string]any)
+		}
+	})
+	service.emitNativeOperation("executed", "", "local.exec pwd", sessions.CommandExecutionResult{ExitCode:0}, "not_required", "", "call-123")
+	if payload == nil { t.Fatal("expected operation event payload") }
+	if payload["toolCallId"] != "call-123" { t.Fatalf("expected tool call identity, got %#v",payload["toolCallId"]) }
+}

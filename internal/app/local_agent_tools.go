@@ -80,7 +80,7 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 	switch decision {
 	case commandPolicyDecisionDeny:
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "denied", "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied", Error:policyReason})
-		s.emitNativeOperation("denied", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "not_required", policyReason)
+		s.emitNativeOperation("denied", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "not_required", policyReason, call.ID)
 		return marshalNativeToolError("local operation denied by Command Policy: %s", policyReason), false, nil
 	case commandPolicyDecisionAsk:
 		state := s.store.AIState()
@@ -104,13 +104,13 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 		}
 		if err := s.store.UpdateAIState(state); err != nil { return "", false, fmt.Errorf("persist pending local tool call: %w", err) }
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "required", "approval_required", -1, 0, ai.CommandAuditEvent{ErrorType:"approval_required"})
-		s.emitNativeOperation("approval_required", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "required", policyReason)
+		s.emitNativeOperation("approval_required", "", call.Function.Name+" "+command, sessions.CommandExecutionResult{ExitCode:-1}, "required", policyReason, call.ID)
 		return fmt.Sprintf(`{"status":"approval_required","requestId":%q}`, request.ID), true, nil
 	case commandPolicyDecisionAllow:
 		if !s.store.SecureStorageStatus().Unlocked { return "", false, securestorage.ErrMasterPasswordRequired }
 		result, status, err := s.executeLocalTool(ctx, call.Function.Name, args)
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "not_required", status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType), Error:result.Error})
-		s.emitNativeOperation(status, "", call.Function.Name+" "+command, result, "not_required", errString(err))
+		s.emitNativeOperation(status, "", call.Function.Name+" "+command, result, "not_required", errString(err), call.ID)
 		payload := map[string]any{"status":status,"target":commandTargetLocal,"operation":call.Function.Name,"path":args.Path,"command":args.Command,"result":result}
 		if err != nil { payload["message"] = err.Error() }
 		encoded, marshalErr := json.Marshal(payload)
@@ -218,7 +218,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 		state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role:"assistant", Content:denialMessage})
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist denied local operation: %w", err) }
 		s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(commandPolicyDecisionAsk), "denied", "denied", -1, 0, ai.CommandAuditEvent{ErrorType:"user_denied"})
-		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, "denied", "user denied the local operation")
+		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, "denied", "user denied the local operation", pending.ToolCallID)
 		return nil
 	}
 
@@ -256,7 +256,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 		state.PendingNativeToolCall = nil
 		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied local approval: %w", err) }
 		s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(decision), string(mode), "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied",Error:reason})
-		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, string(mode), reason)
+		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, string(mode), reason, pending.ToolCallID)
 		return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, marshalNativeToolError("local operation denied by Command Policy: %s", reason))
 	}
 	switch mode {
@@ -278,7 +278,7 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 
 	result, status, executeErr := s.executeLocalTool(s.resolveContext(context.Background()), pending.ToolName, args)
 	s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(decision), string(mode), status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType),Error:result.Error})
-	s.emitNativeOperation(status, "", pending.ToolName+" "+request.Command, result, string(mode), errString(executeErr))
+	s.emitNativeOperation(status, "", pending.ToolName+" "+request.Command, result, string(mode), errString(executeErr), pending.ToolCallID)
 	payload := map[string]any{"status":status,"target":commandTargetLocal,"operation":pending.ToolName,"command":request.Command,"result":result}
 	if executeErr != nil { payload["message"] = executeErr.Error() }
 	encoded, err := json.Marshal(payload)

@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-const usage = "Eiksy — Think. Connect. Operate.\n\nUsage:\n  eiksy [command]\n\nCommands:\n  version   Print the Eiksy version\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Print the Eiksy version\n\nRunning the standalone eiksy-cli binary without arguments starts the terminal UI. Running the desktop eiksy binary without arguments starts the desktop application.\n"
+const usage = "Eiksy — Think. Connect. Operate.\n\nUsage:\n  eiksy [command]\n\nCommands:\n  version   Print the Eiksy version\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Print the Eiksy version\n\nRunning the standalone eiksy-cli binary without arguments starts the local-agent terminal UI. Running the desktop eiksy binary without arguments starts the desktop application.\n"
 
 // Run handles CLI-only arguments.
 // It returns handled=true when the process should exit instead of starting the desktop application.

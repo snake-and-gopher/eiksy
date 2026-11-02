@@ -1,15 +1,15 @@
 package main
 
 import (
-		"fmt"
+	"fmt"
 	"os"
 	"runtime/debug"
 	"strings"
 
 	"eiksy/internal/app"
 	"eiksy/internal/cli"
+	"eiksy/internal/localtui"
 	"eiksy/internal/storage/disk"
-	"eiksy/internal/tui"
 )
 
 var releaseVersion = "dev"
@@ -38,17 +38,27 @@ func resolveReleaseVersion() string {
 	return version
 }
 
-func newBackend() *app.Service {
+func newBackend() (*app.Service, error) {
 	store, err := disk.NewStore()
 	if err != nil {
-		panic(fmt.Sprintf("eiksy-cli: initialize storage: %v", err))
+		return nil, fmt.Errorf("initialize storage: %w", err)
 	}
-	return app.NewTUIRuntimeService(store)
+	service, err := app.NewLocalAgentService(store)
+	if err != nil {
+		return nil, fmt.Errorf("initialize local agent: %w", err)
+	}
+	return service, nil
 }
 
 func main() {
 	if len(os.Args) == 1 {
-		if err := tui.Run(newBackend()); err != nil {
+		service, err := newBackend()
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "eiksy-cli: initialize: %v\n", err)
+			os.Exit(1)
+		}
+		agent := app.NewLocalAIBackendAgent(service)
+		if err := localtui.Run(service, agent); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "eiksy-cli: tui: %v\n", err)
 			os.Exit(1)
 		}

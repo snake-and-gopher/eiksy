@@ -1,149 +1,100 @@
 # Eiksy CLI
 
-The Eiksy CLI provides the terminal UI (TUI) as an additional interaction surface for the same Eiksy application core.
+The standalone eiksy-cli is a local-host AI agent. It starts directly in one terminal conversation and operates on the computer where the process is running.
 
-The CLI does not introduce a separate session store, credential store, command executor, AI provider implementation, or security boundary.
+The CLI uses the same provider configuration, encrypted credential storage, command-policy primitives, local executor and approval boundary as the Eiksy application. It has a dedicated local runtime and does not initialize SSH or SFTP managers.
 
-## Start Eiksy
+## Start
 
-Running Eiksy without arguments starts the desktop application:
+Run the standalone CLI without arguments:
 
-```bash
-eiksy
-```
+    eiksy-cli
 
-The standalone CLI binary starts directly in the terminal UI:
+Running the desktop eiksy binary without arguments continues to start the desktop application.
 
-```bash
-eiksy-cli
-```
+## First start and secure storage
 
+On first start, the CLI asks you to create and confirm a master password. On later starts, it asks for the password when secure storage is locked.
 
-The TUI uses the same application services and backend security controls as the desktop application.
+The master password unlocks the OS-keychain-backed key used to protect saved provider credentials. Password input is masked. If secure storage becomes locked while a prompt or approved operation is in progress, the CLI asks you to unlock it and automatically retries that same request after a successful unlock. It does not require you to retype the prompt or repeat the approval choice.
 
-## Help and version
+If the operating-system keychain is unavailable, the CLI does not bypass secure storage or continue with unprotected credentials.
 
-Show CLI help:
+## Configure an AI provider
 
-```bash
-eiksy --help
-```
+Use **/provider** in the conversation to open provider configuration.
 
-The following forms are also supported:
+### OpenAI-compatible provider
 
-```bash
-eiksy -h
-eiksy help
-```
+Configure:
+- model name;
+- API endpoint (the base URL, for example https://api.example.com/v1);
+- optional API token.
 
-Show the installed version:
+Use **Ctrl+L** to list models exposed by the endpoint and **Ctrl+S** to save. The token is stored in encrypted secure storage and is never displayed in the transcript.
 
-```bash
-eiksy --version
-```
+### Local provider
 
-or:
+Choose the local Qwen provider to configure its model download URL. The local provider screen supports:
+- **Ctrl+S** — save the model URL;
+- **Ctrl+D** — download the model;
+- **Ctrl+R** — start or stop the local model server.
 
-```bash
-eiksy -v
-eiksy version
-```
+The local model workflow requires the corresponding local model runtime to be installed.
 
-## TUI navigation
+## Conversation commands
 
-The TUI uses a keyboard-first layout inspired by classic terminal file managers and editors. The active view is always visible in the header, and the footer shows the primary actions.
+| Input | Action |
+| --- | --- |
+| /provider | Configure or switch AI provider |
+| /help | Show available conversation commands |
+| /quit or /exit | Exit the CLI |
+| Enter | Send the current prompt |
+| Backspace | Edit the current input |
+| Ctrl+C | Exit the CLI |
+
+The transcript presents user prompts, assistant responses, local tool calls, operation details, bounded results and approval outcomes in chronological order.
+
+## Local operations and approvals
+
+The local agent has a dedicated tool set:
+
+- **local.exec** — run a local command;
+- **local.file.read** — read a bounded local file;
+- **local.file.write** — write a local file;
+- **local.file.list** — list a local directory.
+
+All operations run as the operating-system user who launched the CLI and are constrained by that user's permissions. The CLI never opens SSH connections, creates remote sessions, uses SFTP, invokes privilege elevation, or treats the local host as an SSH session.
+
+Command Policy evaluates local operations separately from SSH policy. When approval is required, the requested operation is shown in the conversation. File writes include the target path, byte count, SHA-256 fingerprint and a bounded content preview so you can inspect what will be written before approving:
 
 | Key | Action |
 | --- | --- |
-| `F2` | Sessions |
-| `F3` | Terminal |
-| `F4` | Files |
-| `F5` | Tools |
-| `F6` | Settings |
-| `F7` | AI |
-| `F10` | Exit |
-| `←` / `→` | Previous / next view |
-| `Tab` / `Shift+Tab` | Next / previous view |
-| `↑` / `↓` | Previous / next session |
-| `Enter` | Select session or submit active input |
-| `Ctrl+P` | Open command palette |
-| `Ctrl+N` | Create a new chat session |
-| `Ctrl+F` | Fork the active chat session |
-| `Ctrl+Q` | Quit |
-| `?` | Show keyboard shortcuts |
-| `Esc` | Close an active overlay |
+| Y | Allow this operation once |
+| A | Always allow this exact operation |
+| N | Deny the operation |
 
-Printable characters belong to the active input field. Global navigation uses function keys and control combinations so that normal terminal/chat text is not consumed as an application command.
+A denied operation is not executed. The approval continuation remains bound to the original local tool call and cannot be redirected to an SSH session.
 
-The Terminal view is only interactive when a connected runtime session is bound to it. With no active runtime session, it shows an explicit empty state and does not accept terminal input.
+Command output is bounded. File reads and writes have explicit size limits. Local operations are represented in the command audit trail.
 
-The Files view currently presents application-provided file metadata only; it does not add file-management or editor capabilities to the CLI.
+## Help and version
 
-The Sessions view is backed by the same persistent application session store. `Ctrl+N` creates a new chat session and activates it. The Settings view reads and updates persistent application settings through the same application service used by the desktop UI; `↑/↓` selects a setting and `Enter` changes it.
-## Sessions
+    eiksy-cli --help
+    eiksy-cli --version
 
-Chat sessions are application-owned and persistent. The CLI displays session metadata and uses application services to select or fork sessions.
-
-The CLI does not maintain a separate session database.
-
-Persistent conversation content remains owned by the application and secure-storage boundary. Presentation state should not be treated as a security boundary.
-
-## AI operations and approvals
-
-AI operations use the existing Eiksy backend path:
-
-```text
-AI
- ↓
-Application service
- ↓
-Policy / capability checks
- ↓
-Approval when required
- ↓
-Existing executor
- ↓
-Infrastructure
- ↓
-Bounded result
- ↓
-AI + audit
-```
-
-The TUI only presents this workflow. It does not execute SSH/SFTP operations directly and does not bypass command policy, approval, credential handling, bounded results, or audit.
-
-When an operation requires approval, the TUI presents the approval request and allows the user to resolve it through the existing application boundary.
+The -h, -v, help and version aliases are also supported. Help and version do not initialize the local runtime or access secure storage.
 
 ## Exit codes
 
-The CLI uses the following exit codes for command-line handling:
-
 | Code | Meaning |
 | --- | --- |
-| `0` | Command completed successfully |
-| `1` | TUI/application execution returned an error |
-| `2` | Invalid or unknown command-line input |
+| 0 | Help/version completed successfully |
+| 1 | CLI initialization or terminal UI failed |
+| 2 | Unknown command-line argument |
 
-## Architecture
+## Desktop separation
 
-The CLI/TUI is a frontend, not a second Eiksy application:
+The standalone CLI is local-only. The desktop application retains its existing SSH profiles, remote terminal, SFTP browser and session-bound agent workflows. The CLI uses a dedicated service constructor with no SSH/SFTP managers.
 
-```text
-Eiksy core
-    ↓
-Application services
-    ↓
-Domain / security boundaries
-
-Wails UI ─────┐
-CLI / TUI ────┴──→ Application services
-```
-
-See [the CLI/TUI architecture ADR](adr/0001-cli-tui-architecture.md) for the stable frontend boundary and extension rules.
-
-## Related documentation
-
-- [Architecture](architecture.md)
-- [AI architecture](ai.md)
-- [Product contract](product-contract.md)
-- [Release acceptance](release-acceptance.md)
+See [ADR 0003](adr/0003-cli-local-agent.md) for the local-agent decision and [AI architecture](ai.md) for the shared security model.

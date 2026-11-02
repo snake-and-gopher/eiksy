@@ -26,6 +26,7 @@ type ApprovalRequest struct {
 	SessionID string
 	Command   string
 	Reason    string
+	Preview string `json:"preview,omitempty"`
 }
 
 type Event struct {

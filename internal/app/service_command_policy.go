@@ -45,7 +45,7 @@ func (s *Service) ResolveCommandPolicyRequest(requestID string, mode ai.CommandP
 	if index < 0 { return fmt.Errorf("command request %q not found", requestID) }
 	removePending := func() { policy.PendingRequests = append(policy.PendingRequests[:index], policy.PendingRequests[index+1:]...) }
 
-	if normalizeCommandTarget(request.Target) == commandTargetLocal && mode != ai.CommandPermissionModeDeny {
+	if normalizeCommandTarget(request.Target) == commandTargetLocal {
 		return s.resolveLocalCommandPolicyRequest(request, mode)
 	}
 

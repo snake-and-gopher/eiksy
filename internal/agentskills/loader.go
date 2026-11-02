@@ -95,12 +95,14 @@ func findSkillsDirectory(workingDir string) string {
 }
 
 func safeSkillsDirectory(projectDir string) string {
-	candidate := filepath.Join(projectDir, ".agents", "skills")
-	info, err := os.Lstat(candidate)
-	if err != nil {
+	agentsDir := filepath.Join(projectDir, ".agents")
+	agentsInfo, err := os.Lstat(agentsDir)
+	if err != nil || !agentsInfo.IsDir() || agentsInfo.Mode()&os.ModeSymlink != 0 {
 		return ""
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	candidate := filepath.Join(agentsDir, "skills")
+	info, err := os.Lstat(candidate)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return ""
 	}
 	return candidate

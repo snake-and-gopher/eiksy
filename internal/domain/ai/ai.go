@@ -105,7 +105,16 @@ type ChatSession struct {
 	Messages  []ChatMessage `json:"messages,omitempty"`
 }
 
+type AgentSkill struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
+	Enabled      bool   `json:"enabled"`
+}
+
 type WorkspaceState struct {
+	AgentSkills           []AgentSkill           `json:"agentSkills,omitempty"`
 	Providers             []ProviderDescriptor   `json:"providers"`
 	ContextPolicy         ContextPolicy          `json:"contextPolicy"`
 	CommandPolicy         CommandPolicy          `json:"commandPolicy"`

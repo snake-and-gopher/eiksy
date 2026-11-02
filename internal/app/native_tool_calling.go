@@ -122,6 +122,13 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 				if emitEvent != nil {
 					if requestID, ok := nativeApprovalRequestID(result); ok {
 						if request, found := s.pendingCommandRequest(requestID); found {
+							preview := ""
+							if normalizeCommandTarget(target) == commandTargetLocal {
+								latest := s.store.AIState()
+								if latest.PendingNativeToolCall != nil && latest.PendingNativeToolCall.RequestID == request.ID {
+									preview = LocalApprovalPreview(latest.PendingNativeToolCall.ToolName, latest.PendingNativeToolCall.ToolArguments)
+								}
+							}
 							emitEvent(agentai.Event{
 								Type: agentai.EventApprovalRequired,
 								Tool: call.Function.Name,
@@ -132,6 +139,7 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 									SessionID: request.SessionID,
 									Command: request.Command,
 									Reason: request.Reason,
+									Preview: preview,
 								},
 							})
 						}
@@ -147,6 +155,23 @@ func (s *Service) runNativeToolLoopWithTargetEvents(ctx context.Context, provide
 	}
 
 	return "", true, fmt.Errorf("AI exceeded the maximum number of tool-calling turns")
+}
+
+func LocalApprovalPreview(toolName, arguments string) string {
+	var args struct {
+		Path string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil { return "" }
+	switch toolName {
+	case nativeLocalFileWriteToolName:
+		runes := []rune(args.Content)
+		preview := string(runes)
+		if len(runes) > 600 { preview = string(runes[:600]) + "\n[preview truncated]" }
+		return fmt.Sprintf("File: %s\nContent size: %d bytes\nContent preview:\n%s", args.Path, len([]byte(args.Content)), preview)
+	default:
+		return ""
+	}
 }
 
 func (s *Service) nativeMessagesFromState(state ai.WorkspaceState, activeSessionID string) []nativeChatMessage {

@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-func TestRunWithoutArgumentsStartsDesktopApp(t *testing.T) {
+func TestRunWithoutArgumentsStartsInteractiveCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	handled, exitCode := Run(nil, "v1.2.3", &stdout, &stderr)
 	if handled {
-		t.Fatal("expected no-argument invocation to start the desktop app")
+		t.Fatal("expected no-argument invocation to start the interactive CLI")
 	}
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d", exitCode)

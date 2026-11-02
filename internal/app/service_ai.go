@@ -621,6 +621,18 @@ func (s *Service) SendPlainChatMessage(ctx context.Context, message string) erro
 	return nil
 }
 
+// LocalAgentState is the intentionally narrow state surface exposed to the
+// standalone local-agent CLI. It excludes SSH profiles, runtime sessions,
+// connection metadata and unrelated desktop workspace state.
+type LocalAgentState struct {
+	AI ai.WorkspaceState
+}
+
+func (s *Service) GetLocalAgentState() LocalAgentState {
+	if s == nil || s.store == nil { return LocalAgentState{} }
+	return LocalAgentState{AI:s.scrubAIStateForShell(s.store.AIState())}
+}
+
 func (s *Service) activeConfiguredProvider(state ai.WorkspaceState) (*ai.ProviderDescriptor, error) {
 	for i := range state.Providers {
 		if state.Providers[i].Selected && state.Providers[i].Configured {

@@ -36,7 +36,8 @@ The key design principle is simple:
 - Local Qwen3 4B (Q4_K_M) workflow.
 - Backend-built infrastructure context without credentials.
 - Typed native tools.
-- Controlled `ssh.exec` command execution.
+- Controlled `ssh.exec` command execution in the desktop SSH agent.
+- Standalone local-host CLI agent with local command and file tools, independent policy scope and approval handling.
 - Command Policy with allow / approval / deny semantics.
 - Human approval for sensitive operations.
 - Bounded command results.
@@ -120,21 +121,11 @@ The architecture is considered stable. New features should use the existing boun
 
 The product contract is **Think → Connect → Operate → Think**. See [`docs/product-contract.md`](docs/product-contract.md) for the product-level Definition of Done and [`docs/architecture.md`](docs/architecture.md) for the implementation boundaries.
 
-## Terminal UI
+## Local-agent CLI
 
-Eiksy also provides a terminal UI for terminal-first workflows:
+Eiksy also provides a standalone local-agent CLI for terminal-first workflows. Run `eiksy-cli` without arguments to start the local agent. The CLI has no SSH/SFTP runtime and does not alter the desktop application's remote operations workflow.
 
-```bash
-```
-
-Choose the initial view or keep the current terminal screen:
-
-```bash
-```
-
-The CLI/TUI is another frontend for the same Eiksy application core. It does not introduce a separate credential store, session database, executor, or security boundary.
-
-See [the CLI guide](docs/cli.md) for commands, navigation, configuration and security boundaries.
+See [the CLI guide](docs/cli.md) for secure storage, provider configuration, local tools and approvals.
 
 ## Download
 
@@ -178,13 +169,13 @@ Release assets also include platform-specific CLI binaries:
 - **Windows x64:** `eiksy-cli-windows-amd64.exe`
 - **Linux x64:** `eiksy-cli-linux-amd64`
 
-The CLI provides the terminal UI and uses the same application core and security boundaries as the desktop application. After installing the CLI binary, run:
+The CLI is a local-host agent. It starts directly in a single terminal conversation and never opens SSH connections or SFTP sessions. After installing the CLI binary, run:
 
 ```bash
-eiksy-cli tui
+eiksy-cli
 ```
 
-See [the CLI guide](docs/cli.md) for available commands and TUI options.
+Use `/provider` in the conversation to configure an OpenAI-compatible or local model. See [the CLI guide](docs/cli.md) for secure storage, provider configuration, local tools and approvals.
 
 ### Building from source
 

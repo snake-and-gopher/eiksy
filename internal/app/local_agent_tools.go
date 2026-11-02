@@ -193,37 +193,27 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	if !commandToolEnabled(policy, request.ToolID) {
 		return fmt.Errorf("tool %q is disabled in command policy", request.ToolID)
 	}
-	// Resolve the provider (including its protected token) before executing the
-	// approved operation. If secure storage is locked, the caller must unlock it
-	// and retry; never execute and only then discover continuation cannot resume.
-	if _, err := s.providerByID(state, pending.ProviderID); err != nil { return err }
-
-	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", request.Command)
-	if decision == commandPolicyDecisionDeny {
+	if mode == ai.CommandPermissionModeDeny {
 		filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
 		for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
 		policy.PendingRequests = filtered
 		state.CommandPolicy = policy
 		state.PendingNativeToolCall = nil
-		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied local approval: %w", err) }
-		return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, marshalNativeToolError("local operation denied by Command Policy: %s", reason))
+		if pending.UserMessage != "" {
+			state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role:"user", Content:pending.UserMessage})
+		}
+		denialMessage := "I did not execute the requested local operation because you denied approval."
+		state.AgentMessages = append(state.AgentMessages, ai.ChatMessage{Role:"assistant", Content:denialMessage})
+		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist denied local operation: %w", err) }
+		s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(commandPolicyDecisionAsk), "denied", "denied", -1, 0, ai.CommandAuditEvent{ErrorType:"user_denied"})
+		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, "denied", "user denied the local operation")
+		return nil
 	}
-	switch mode {
-	case ai.CommandPermissionModeNow:
-	case ai.CommandPermissionModeAlways:
-		policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target:commandTargetLocal,ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact local operation"})
-	case ai.CommandPermissionModeSession:
-		policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target:commandTargetLocal,ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: allow this exact local operation for this CLI session"})
-	default:
-		return fmt.Errorf("unsupported permission mode %q", mode)
-	}
-	policy.CommandRules = normalizeCommandRules(policy.CommandRules)
-	filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
-	for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
-	policy.PendingRequests = filtered
-	state.CommandPolicy = policy
-	state.PendingNativeToolCall = nil
-	if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist approved local operation: %w", err) }
+
+	// Resolve the provider (including its protected token) before executing the
+	// approved operation. If secure storage is locked, the caller must unlock it
+	// and retry; never execute and only then discover continuation cannot resume.
+	if _, err := s.providerByID(state, pending.ProviderID); err != nil { return err }
 
 	var args struct {
 		Command string `json:"command"`
@@ -237,6 +227,36 @@ func (s *Service) resolveLocalCommandPolicyRequest(request ai.CommandRequest, mo
 	pendingCommand := strings.TrimSpace(args.Command)
 	if pendingCommand == "" { pendingCommand = strings.TrimSpace(args.Path) }
 	if pendingCommand != request.Command { return fmt.Errorf("pending local tool arguments no longer match the approved operation") }
+
+	decision, reason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, request.ToolID, "", request.Command)
+	if decision == commandPolicyDecisionDeny {
+		filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
+		for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
+		policy.PendingRequests = filtered
+		state.CommandPolicy = policy
+		state.PendingNativeToolCall = nil
+		if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist policy-denied local approval: %w", err) }
+		s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(decision), string(mode), "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied",Error:reason})
+		s.emitNativeOperation("denied", "", pending.ToolName+" "+request.Command, sessions.CommandExecutionResult{ExitCode:-1}, string(mode), reason)
+		return s.resumePendingNativeToolCall(s.resolveContext(context.Background()), pending, marshalNativeToolError("local operation denied by Command Policy: %s", reason))
+	}
+	switch mode {
+	case ai.CommandPermissionModeNow:
+	case ai.CommandPermissionModeAlways:
+		policy.CommandRules = append(policy.CommandRules, ai.CommandRule{Target:commandTargetLocal,ToolID:request.ToolID,Pattern:request.Command,Action:ai.CommandPermissionAllow,Description:"Approved by user: always allow this exact local operation"})
+	case ai.CommandPermissionModeSession:
+		return fmt.Errorf("session-scoped local approvals are not available for the standalone local agent")
+	default:
+		return fmt.Errorf("unsupported permission mode %q", mode)
+	}
+	policy.CommandRules = normalizeCommandRules(policy.CommandRules)
+	filtered := make([]ai.CommandRequest, 0, len(policy.PendingRequests))
+	for _, item := range policy.PendingRequests { if item.ID != request.ID { filtered = append(filtered, item) } }
+	policy.PendingRequests = filtered
+	state.CommandPolicy = policy
+	state.PendingNativeToolCall = nil
+	if err := s.store.UpdateAIState(state); err != nil { return fmt.Errorf("persist approved local operation: %w", err) }
+
 	result, status, executeErr := s.executeLocalTool(s.resolveContext(context.Background()), pending.ToolName, args)
 	s.recordCommandAuditForTarget(commandTargetLocal, request.ToolID, pending.ProviderID, "", request.Command, string(decision), string(mode), status, result.ExitCode, result.DurationMs, ai.CommandAuditEvent{ErrorType:string(result.ErrorType),Error:result.Error})
 	s.emitNativeOperation(status, "", pending.ToolName+" "+request.Command, result, string(mode), errString(executeErr))

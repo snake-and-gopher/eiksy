@@ -91,3 +91,53 @@ func TestLocalShellRejectsPrivilegeEscalation(t *testing.T) {
 		if pending || !strings.Contains(result, "privilege escalation") { t.Fatalf("expected hard denial for %q, got pending=%v result=%s", command, pending, result) }
 	}
 }
+
+func TestLocalApprovalDenialDoesNotExecuteAndRecordsDenial(t *testing.T) {
+	store := memory.NewStore()
+	target := filepath.Join(t.TempDir(), "must-not-exist.txt")
+	args, err := json.Marshal(map[string]string{"path":target,"content":"must not be written"})
+	if err != nil { t.Fatal(err) }
+	messages, err := json.Marshal([]nativeChatMessage{{Role:"user",Content:"write the file"}})
+	if err != nil { t.Fatal(err) }
+
+	state := store.AIState()
+	state.CommandPolicy.PendingRequests = []domainai.CommandRequest{{
+		Target:commandTargetLocal, ID:"request-deny-1", ToolID:nativeLocalFilesPolicyToolID,
+		Command:target, RequestedAt:"2026-11-02T00:00:00Z",
+	}}
+	state.PendingNativeToolCall = &domainai.PendingNativeToolCall{
+		Target:commandTargetLocal, RequestID:"request-deny-1", ProviderID:"provider-not-configured",
+		ToolCallID:"tool-call-1", ToolName:nativeLocalFileWriteToolName,
+		ToolArguments:string(args), UserMessage:"write the file", MessagesJSON:string(messages),
+	}
+	if err := store.UpdateAIState(state); err != nil { t.Fatal(err) }
+
+	service, err := NewLocalAgentService(store)
+	if err != nil { t.Fatal(err) }
+	if err := service.ResolveCommandPolicyRequest("request-deny-1", domainai.CommandPermissionModeDeny); err != nil {
+		t.Fatalf("deny local operation: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) { t.Fatalf("denied file operation was executed: %v", err) }
+	updated := store.AIState()
+	if updated.PendingNativeToolCall != nil { t.Fatalf("pending native call was not cleared: %#v", updated.PendingNativeToolCall) }
+	if len(updated.CommandPolicy.PendingRequests) != 0 { t.Fatalf("pending approval was not cleared: %#v", updated.CommandPolicy.PendingRequests) }
+	if len(updated.AgentMessages) < 2 || !strings.Contains(updated.AgentMessages[len(updated.AgentMessages)-1].Content, "did not execute") {
+		t.Fatalf("expected the agent to continue after denial, got %#v", updated.AgentMessages)
+	}
+	audit := service.GetCommandAuditTrail()
+	if len(audit) == 0 || audit[0].Target != commandTargetLocal || audit[0].Approval != "denied" || audit[0].Result != "denied" {
+		t.Fatalf("expected a local denial audit event, got %#v", audit)
+	}
+}
+
+func TestLocalApprovalPreviewBoundsFileWriteContent(t *testing.T) {
+	content := strings.Repeat("ж", 900)
+	arguments, err := json.Marshal(map[string]string{"path":"/tmp/preview.txt","content":content})
+	if err != nil { t.Fatal(err) }
+	preview := LocalApprovalPreview(nativeLocalFileWriteToolName, string(arguments))
+	if !strings.Contains(preview, "File: /tmp/preview.txt") || !strings.Contains(preview, "Content size: 1800 bytes") {
+		t.Fatalf("expected path and byte size in preview, got %q", preview)
+	}
+	if !strings.Contains(preview, "[preview truncated]") { t.Fatalf("expected bounded preview marker, got %q", preview) }
+	if strings.Contains(preview, strings.Repeat("ж", 700)) { t.Fatal("preview should not expose the entire large file content") }
+}

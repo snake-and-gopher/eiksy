@@ -137,7 +137,7 @@ func TestLocalApprovalPreviewBoundsFileWriteContent(t *testing.T) {
 	arguments, err := json.Marshal(map[string]string{"path":"/tmp/preview.txt","content":content})
 	if err != nil { t.Fatal(err) }
 	preview := LocalApprovalPreview(nativeLocalFileWriteToolName, string(arguments))
-	if !strings.Contains(preview, "File: /tmp/preview.txt") || !strings.Contains(preview, "Content size: 1800 bytes") {
+	if !strings.Contains(preview, `File: "/tmp/preview.txt"`) || !strings.Contains(preview, "Content size: 1800 bytes") {
 		t.Fatalf("expected path and byte size in preview, got %q", preview)
 	}
 	if !strings.Contains(preview, "[preview truncated]") { t.Fatalf("expected bounded preview marker, got %q", preview) }

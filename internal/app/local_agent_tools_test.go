@@ -145,6 +145,7 @@ func TestLocalApprovalPreviewBoundsFileWriteContent(t *testing.T) {
 	if !strings.Contains(preview, `File: "/tmp/preview.txt"`) || !strings.Contains(preview, "Content size: 1800 bytes") {
 		t.Fatalf("expected path and byte size in preview, got %q", preview)
 	}
+	if !strings.Contains(preview, "SHA-256:") { t.Fatalf("expected content fingerprint in preview, got %q", preview) }
 	if !strings.Contains(preview, "[preview truncated]") { t.Fatalf("expected bounded preview marker, got %q", preview) }
 	if strings.Contains(preview, strings.Repeat("ж", 700)) { t.Fatal("preview should not expose the entire large file content") }
 }

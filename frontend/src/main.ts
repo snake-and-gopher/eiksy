@@ -46,6 +46,7 @@ import {
   StopLocalModel,
   UploadSFTPFiles,
   UpdateCommandPolicy,
+  UpdateAgentSkills,
   UpdateSettings,
 } from "../wailsjs/go/main/App";
 import { BrowserOpenURL, EventsOn } from "../wailsjs/runtime/runtime";
@@ -1389,6 +1390,31 @@ class EiksyShell {
         this.render();
       }
     });
+    root?.querySelectorAll<HTMLFormElement>("[data-agent-skill-form]").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        const id = String(data.get("id") ?? "");
+        const skills = [...(this.shellState?.ai.agentSkills ?? [])];
+        const index = skills.findIndex((skill) => skill.id === id);
+        if (index < 0) return;
+        skills[index] = { id, name: String(data.get("name") ?? ""), description: String(data.get("description") ?? ""), instructions: String(data.get("instructions") ?? ""), enabled: data.get("enabled") === "on" };
+        await this.persistAgentSkills(skills);
+      });
+    });
+    root?.querySelectorAll<HTMLButtonElement>("[data-agent-skill-delete]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const id = button.dataset.agentSkillDelete;
+        if (id) await this.persistAgentSkills((this.shellState?.ai.agentSkills ?? []).filter((skill) => skill.id !== id));
+      });
+    });
+    root?.querySelector<HTMLFormElement>("[data-agent-skill-create]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget as HTMLFormElement);
+      const skills = [...(this.shellState?.ai.agentSkills ?? []), { id: crypto.randomUUID(), name: String(data.get("name") ?? ""), description: String(data.get("description") ?? ""), instructions: String(data.get("instructions") ?? ""), enabled: true }];
+      await this.persistAgentSkills(skills);
+    });
+
     const agentForm = root?.querySelector<HTMLFormElement>("[data-agent-chat-form]");
     agentForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -3057,13 +3083,15 @@ class EiksyShell {
   }
 
   private renderAgentWorkspace(): string {
+    const skillsPanel = this.renderAgentSkillsPanel();
     if (!this.hasConfiguredProvider()) {
-      return '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
+      return skillsPanel + '<div class="empty-state">Configure an AI provider in Settings to use Agent.</div>';
     }
     if (!this.agentBoundSessionID) {
-      return '<div class="empty-state">Open a session to use Agent.</div>';
+      return skillsPanel + '<div class="empty-state">Open a session to use Agent.</div>';
     }
     return `
+      ${skillsPanel}
       <div class="agent-terminal-header">
         <div><span class="agent-terminal-indicator"></span><strong>Agent session</strong></div>
         <span class="agent-terminal-session">${escapeHtml(this.agentBoundSessionID)}</span>
@@ -3075,6 +3103,28 @@ class EiksyShell {
         <button class="action-button" type="submit" ${this.agentStatus === "thinking" ? "disabled" : ""}>Send</button>
       </form>
     `;
+  }
+
+
+  private renderAgentSkillsPanel(): string {
+    const skills = this.shellState?.ai.agentSkills ?? [];
+    const rows = skills.map((skill) =>
+      '<form class="provider-form command-policy-row" data-agent-skill-form>' +
+      '<input type="hidden" name="id" value="' + escapeHtml(skill.id) + '" />' +
+      '<label><span>Name</span><input name="name" maxlength="80" required value="' + escapeHtml(skill.name) + '" /></label>' +
+      '<label><span>Description (when to use this skill)</span><input name="description" maxlength="300" required value="' + escapeHtml(skill.description) + '" /></label>' +
+      '<label><span>Instructions (Markdown)</span><textarea name="instructions" rows="5" maxlength="12000" required>' + escapeHtml(skill.instructions) + '</textarea></label>' +
+      '<div class="provider-form-actions"><label class="inline-check"><span>Enabled</span><input type="checkbox" name="enabled" ' + (skill.enabled ? "checked" : "") + ' /></label>' +
+      '<button class="action-button" type="submit">Save skill</button><button class="action-button secondary" type="button" data-agent-skill-delete="' + escapeHtml(skill.id) + '">Delete</button></div></form>'
+    ).join("");
+    return '<details class="agent-skills-panel"><summary>Agent skills (' + skills.length + ')</summary><div class="agent-skills-content">' +
+      '<p class="section-copy">Skills are user-defined instructions included in the agent context when enabled. They do not grant extra permissions.</p>' +
+      (rows || '<div class="empty-state">No custom skills yet.</div>') +
+      '<form class="provider-form" data-agent-skill-create><div class="section-title">Create skill</div>' +
+      '<label><span>Name</span><input name="name" maxlength="80" required placeholder="e.g. Kubernetes troubleshooting" /></label>' +
+      '<label><span>Description (when to use this skill)</span><input name="description" maxlength="300" required placeholder="Use when diagnosing Kubernetes workloads" /></label>' +
+      '<label><span>Instructions (Markdown)</span><textarea name="instructions" rows="6" maxlength="12000" required placeholder="Describe the workflow, constraints, commands, and expected output…"></textarea></label>' +
+      '<button class="action-button" type="submit" ' + (skills.length >= 20 ? "disabled" : "") + '>Add skill</button></form></div></details>';
   }
 
   private renderAgentMessages(): string {
@@ -3733,6 +3783,16 @@ class EiksyShell {
       })),
       localDocsPath: raw?.localDocsPath ?? "",
     };
+  }
+
+  private async persistAgentSkills(skills: aiModels.AgentSkill[]): Promise<void> {
+    try {
+      await UpdateAgentSkills(skills);
+      await this.refresh("");
+    } catch (error) {
+      this.setErrorMessage(formatError("Unable to update agent skills", error));
+      this.render();
+    }
   }
 
   private async persistCommandPolicy(

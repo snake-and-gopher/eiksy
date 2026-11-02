@@ -52,8 +52,10 @@ type chatMessage struct {
 type transcriptEntry struct {
 	role    string
 	content string
-	tool    string
-	status  string
+	tool       string
+	toolCallID string
+	command    string
+	status     string
 	output  string
 	isTool  bool
 }
@@ -100,6 +102,7 @@ type Model struct {
 
 	messages      []chatMessage
 	transcript    []transcriptEntry
+	pendingOperationEvents []map[string]any
 	historyLoaded bool
 	approval      *agentai.ApprovalRequest
 	resolving bool
@@ -258,7 +261,7 @@ func (m *Model) restorePendingApproval() {
 		}
 		if !hasTranscriptEntry {
 			output, _ := json.Marshal(map[string]string{"status":"approval_required","operation":pending.ToolName,"command":request.Command})
-			m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:pending.ToolName, status:"approval_required", output:prettyToolOutput(string(output))})
+			m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:pending.ToolName, toolCallID:pending.ToolCallID, command:request.Command, status:"approval_required", output:prettyToolOutput(string(output))})
 		}
 		m.status = "A local operation is waiting for your approval."
 		return
@@ -314,12 +317,6 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.resolving = false
 		m.retryApproval = false
 		m.approval = nil
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
-			if entry.status == "approval_required" || entry.status == "running" {
-				if msg.mode == domainai.CommandPermissionModeDeny { entry.status = "denied" } else { entry.status = "finished" }
-			}
-		}
 		m.appendNewPersistedMessages()
 		m.restorePendingApproval()
 		lastToolStatus := ""
@@ -388,31 +385,63 @@ func waitAgentEvent(events <-chan agentai.Event) tea.Cmd {
 }
 
 func (m *Model) handleLocalOperation(payload map[string]any) {
-	encoded, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil { return }
+	if m.applyLocalOperation(payload) { return }
+	// Runtime notifications and agent events use separate channels. Queue an
+	// unmatched notification until the corresponding tool-start event arrives.
+	if len(m.pendingOperationEvents) >= 32 {
+		m.pendingOperationEvents = m.pendingOperationEvents[1:]
+	}
+	m.pendingOperationEvents = append(m.pendingOperationEvents, payload)
+}
+
+func (m *Model) applyLocalOperation(payload map[string]any) bool {
 	command, _ := payload["command"].(string)
 	tool := strings.TrimSpace(strings.SplitN(command, " ", 2)[0])
+	toolCallID, _ := payload["toolCallId"].(string)
 	status, _ := payload["status"].(string)
 
-	// The service emits this event for every local operation, including policy
-	// denials and operations that did not need approval. Update the tool call
-	// already shown in the transcript instead of silently dropping the event or
-	// creating a duplicate entry.
 	for i := len(m.transcript)-1; i >= 0; i-- {
 		entry := &m.transcript[i]
 		if !entry.isTool { continue }
-		if tool != "" && entry.tool != tool { continue }
-		if entry.status != "running" && entry.status != "approval_required" && !strings.Contains(entry.output, "approval_required") { continue }
+		if toolCallID != "" && entry.toolCallID != toolCallID { continue }
+		if toolCallID == "" && tool != "" && entry.tool != tool { continue }
+		if toolCallID == "" && entry.status != "running" && entry.status != "approval_required" && entry.command != command { continue }
 		if tool != "" { entry.tool = tool }
+		entry.toolCallID = toolCallID
+		entry.command = command
 		entry.status = status
-		entry.output = truncateDisplay(string(encoded), 2400)
+		entry.output = formatLocalOperationOutput(payload)
 		m.scrollOffset = 0
 		if statusText := localOperationStatus(status); statusText != "" { m.status = statusText }
-		return
+		return true
 	}
-	m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:tool, status:status, output:truncateDisplay(string(encoded),2400)})
-	m.scrollOffset = 0
-	m.status = localOperationStatus(status)
+	return false
+}
+
+func formatLocalOperationOutput(payload map[string]any) string {
+	var output strings.Builder
+	command, _ := payload["command"].(string)
+	if command != "" { fmt.Fprintf(&output, "Command: %s\n", safeTerminalLine(command)) }
+	if status, _ := payload["status"].(string); status != "" { fmt.Fprintf(&output, "Status: %s\n", safeTerminalLine(status)) }
+	if exitCode, ok := payload["exitCode"]; ok { fmt.Fprintf(&output, "Exit code: %v\n", exitCode) }
+	if duration, ok := payload["durationMs"]; ok { fmt.Fprintf(&output, "Duration: %v ms\n", duration) }
+	if message, _ := payload["message"].(string); strings.TrimSpace(message) != "" { fmt.Fprintf(&output, "Message: %s\n", safeTerminalLine(message)) }
+	if errText, _ := payload["error"].(string); strings.TrimSpace(errText) != "" { fmt.Fprintf(&output, "Error: %s\n", safeTerminalLine(errText)) }
+	if stdout, _ := payload["stdout"].(string); stdout != "" { fmt.Fprintf(&output, "\nstdout:\n%s\n", safeTerminalText(stdout)) }
+	if stderr, _ := payload["stderr"].(string); stderr != "" { fmt.Fprintf(&output, "\nstderr:\n%s\n", safeTerminalText(stderr)) }
+	return truncateDisplay(strings.TrimRight(output.String(), "\n"), 2400)
+}
+
+func formatNativeToolOutput(value string) string {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(value), &payload); err != nil { return value }
+	result, hasResult := payload["result"].(map[string]any)
+	if !hasResult { return prettyToolOutput(value) }
+	for key, item := range result { payload[key] = item }
+	if _, ok := payload["command"]; !ok {
+		if path, pathOK := payload["path"].(string); pathOK && path != "" { payload["command"] = path }
+	}
+	return formatLocalOperationOutput(payload)
 }
 
 func localOperationStatus(status string) string {
@@ -427,20 +456,40 @@ func localOperationStatus(status string) string {
 func (m *Model) handleAgentEvent(event agentai.Event) {
 	switch event.Type {
 	case agentai.EventToolStarted:
-		m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:event.Tool, status:"running"})
+		m.transcript = append(m.transcript, transcriptEntry{isTool:true, tool:event.Tool, toolCallID:event.ToolCallID, status:"running"})
 		m.scrollOffset = 0
+		if event.ToolCallID != "" {
+			for i, pending := range m.pendingOperationEvents {
+				pendingID, _ := pending["toolCallId"].(string)
+				if pendingID != event.ToolCallID { continue }
+				m.applyLocalOperation(pending)
+				m.pendingOperationEvents = append(m.pendingOperationEvents[:i], m.pendingOperationEvents[i+1:]...)
+				break
+			}
+		}
 		if len(m.transcript) > 100 { m.transcript = append([]transcriptEntry(nil), m.transcript[len(m.transcript)-100:]...) }
 	case agentai.EventToolOutput:
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
-			entry.output = truncateDisplay(prettyToolOutput(event.Content), 2400)
-			if status := nativeToolResultStatus(event.Content); status != "" { entry.status = status }
+		for i := len(m.transcript)-1; i >= 0; i-- {
+			entry := &m.transcript[i]
+			if !entry.isTool { continue }
+			if event.ToolCallID != "" && entry.toolCallID != event.ToolCallID { continue }
+			if event.ToolCallID == "" && event.Tool != "" && entry.tool != event.Tool { continue }
+			// Runtime notifications contain the command and complete process result.
+			if entry.command == "" {
+				entry.output = truncateDisplay(formatNativeToolOutput(event.Content), 2400)
+				if status := nativeToolResultStatus(event.Content); status != "" { entry.status = status }
+			}
+			break
 		}
 	case agentai.EventToolFinished:
-		if len(m.transcript) > 0 && m.transcript[len(m.transcript)-1].isTool {
-			entry := &m.transcript[len(m.transcript)-1]
+		for i := len(m.transcript)-1; i >= 0; i-- {
+			entry := &m.transcript[i]
+			if !entry.isTool { continue }
+			if event.ToolCallID != "" && entry.toolCallID != event.ToolCallID { continue }
+			if event.ToolCallID == "" && event.Tool != "" && entry.tool != event.Tool { continue }
 			if entry.status == "running" { entry.status = "finished" }
 			if event.Tool != "" { entry.tool = event.Tool }
+			break
 		}
 	case agentai.EventApprovalRequired:
 		if event.Approval != nil {
@@ -784,10 +833,13 @@ func (m *Model) startAgent(value string, appendUser bool) tea.Cmd {
 	if !m.hasConfiguredSelectedProvider() {
 		m.status = "No configured AI provider. Use /provider first."
 		m.input = value
+		m.cursor = len([]rune(value))
 		return nil
 	}
 	if m.agent == nil {
 		m.status = "Local agent is unavailable."
+		m.input = value
+		m.cursor = len([]rune(value))
 		return nil
 	}
 	if appendUser { m.transcript = append(m.transcript, transcriptEntry{role:"user", content:value}) }

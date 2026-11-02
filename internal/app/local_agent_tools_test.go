@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	domainai "eiksy/internal/domain/ai"
 	"eiksy/internal/storage/memory"
+	"eiksy/internal/securestorage"
 )
 
 func localCall(name, args string) nativeToolCall {
@@ -158,4 +160,24 @@ func TestLocalPolicyCommandScopesFileWritesByContent(t *testing.T) {
 	if first != same { t.Fatal("identical writes must have the same policy key") }
 	if first == changed { t.Fatal("changing file content must require a new approval policy key") }
 	if first == otherPath { t.Fatal("changing the target path must require a new approval policy key") }
+}
+
+func TestLocalAllowedOperationRequiresUnlockedVault(t *testing.T) {
+	service, err := NewLocalAgentService(memory.NewStore())
+	if err != nil { t.Fatal(err) }
+	target := filepath.Join(t.TempDir(), "locked.txt")
+	content := "must wait for unlock"
+	state := service.store.AIState()
+	state.CommandPolicy.CommandRules = []domainai.CommandRule{{
+		Target:commandTargetLocal, ToolID:nativeLocalFilesPolicyToolID,
+		Pattern:localPolicyCommand(nativeLocalFileWriteToolName,target,content),
+		Action:domainai.CommandPermissionAllow,
+	}}
+	if err := service.store.UpdateAIState(state); err != nil { t.Fatal(err) }
+	service.store.LockSecureStorage()
+	call := localCall(nativeLocalFileWriteToolName, `{"path":`+mustJSON(t,target)+`,"content":`+mustJSON(t,content)+`}`)
+	_, pending, err := service.dispatchLocalToolCall(context.Background(), call, state.CommandPolicy, "provider-1", "write a file", nil)
+	if !errors.Is(err, securestorage.ErrMasterPasswordRequired) { t.Fatalf("expected master-password requirement, got %v", err) }
+	if pending { t.Fatal("locked vault should not create an auto-approved operation") }
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) { t.Fatalf("file was written while vault was locked: %v", statErr) }
 }

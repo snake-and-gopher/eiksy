@@ -85,6 +85,7 @@ type PendingNativeToolCall struct {
 }
 
 type CommandPolicy struct {
+	AutoApprove         bool                `json:"autoApprove,omitempty"`
 	Tools               []CommandTool       `json:"tools"`
 	CommandRules        []CommandRule       `json:"commandRules,omitempty"`
 	PendingRequests     []CommandRequest    `json:"pendingRequests"`

@@ -64,6 +64,7 @@ type RuntimeSession = appModels.RuntimeSessionView;
 type SessionProfile = sessions.ProfileInput;
 type AIProvider = aiModels.ProviderDescriptor;
 type CommandPolicyState = {
+  autoApprove: boolean;
   tools: aiModels.CommandTool[];
   commandRules: aiModels.CommandRule[];
   pendingRequests: aiModels.CommandRequest[];
@@ -1502,6 +1503,14 @@ class EiksyShell {
             this.resolvingAgentApprovalID = "";
             this.render();
           }
+        });
+      });
+    root
+      ?.querySelector<HTMLInputElement>("[data-command-auto-approve]")
+      ?.addEventListener("change", async (event) => {
+        const enabled = (event.currentTarget as HTMLInputElement).checked;
+        await this.persistCommandPolicy((policy) => {
+          policy.autoApprove = enabled;
         });
       });
     root
@@ -3200,6 +3209,8 @@ class EiksyShell {
             `,
       settings: `
                 <div class="section-title">Tool settings</div>
+                <label class="inline-check"><span>Auto-approve agent requests</span><input type="checkbox" data-command-auto-approve ${policy.autoApprove ? "checked" : ""} /></label>
+                <div class="section-copy">Automatically execute operations that are not explicitly denied by Command Policy. Disabled tools, hard safety restrictions, and SFTP file writes still require their existing safeguards.</div>
                 <form class="provider-form" data-command-docs-form>
                     <label>
                         <span>Local documentation path</span>
@@ -3689,7 +3700,7 @@ class EiksyShell {
 
   private commandPolicy(): CommandPolicyState {
     const raw = this.shellState?.ai.commandPolicy as
-      aiModels.CommandPolicy | undefined;
+      (aiModels.CommandPolicy & { autoApprove?: boolean }) | undefined;
     const tools = Array.isArray(raw?.tools) ? raw.tools : [];
     const commandRules = Array.isArray(raw?.commandRules)
       ? raw.commandRules
@@ -3698,6 +3709,7 @@ class EiksyShell {
       ? raw.pendingRequests
       : [];
     return {
+      autoApprove: Boolean(raw?.autoApprove),
       tools: tools.map((tool) => ({
         id: tool.id ?? "",
         name: tool.name ?? tool.id ?? "",

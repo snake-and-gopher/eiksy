@@ -77,6 +77,10 @@ func (s *Service) dispatchLocalToolCall(ctx context.Context, call nativeToolCall
 	toolID := policyToolIDForNativeTool(call.Function.Name)
 	policyCommand := localPolicyCommand(call.Function.Name, command, args.Content)
 	decision, policyReason := evaluateCommandPolicyForTarget(policy, commandTargetLocal, toolID, "", policyCommand)
+	if decision == commandPolicyDecisionAsk && policy.AutoApprove {
+		decision = commandPolicyDecisionAllow
+		policyReason = "automatically approved by Command Policy"
+	}
 	switch decision {
 	case commandPolicyDecisionDeny:
 		s.recordCommandAuditForTarget(commandTargetLocal, toolID, providerID, "", command, string(decision), "denied", "policy_denied", -1, 0, ai.CommandAuditEvent{ErrorType:"policy_denied", Error:policyReason})

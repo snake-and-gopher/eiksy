@@ -374,6 +374,10 @@ func (s *Service) dispatchNativeToolCall(call nativeToolCall, policy ai.CommandP
 	}
 
 	decision, reason := evaluateCommandPolicy(policy, nativeSSHExecPolicyToolID, args.SessionID, args.Command)
+	if decision == commandPolicyDecisionAsk && policy.AutoApprove {
+		decision = commandPolicyDecisionAllow
+		reason = "automatically approved by Command Policy"
+	}
 	switch decision {
 	case commandPolicyDecisionDeny:
 		s.recordCommandAudit(providerID, args.SessionID, args.Command, string(decision), "denied", "policy_denied", 0, 0, ai.CommandAuditEvent{ErrorType: "policy_denied", Error: strings.TrimSpace(reason)})

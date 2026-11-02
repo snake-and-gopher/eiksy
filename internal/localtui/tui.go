@@ -281,6 +281,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if m.running {
 			m.running = false
 			m.currentPrompt = ""
+			m.setActiveToolStatus("interrupted")
 			m.status = "Agent stream closed unexpectedly."
 		}
 	case localOperationEvent:
@@ -453,6 +454,15 @@ func localOperationStatus(status string) string {
 	}
 }
 
+func (m *Model) setActiveToolStatus(status string) {
+	for i := len(m.transcript)-1; i >= 0; i-- {
+		if m.transcript[i].isTool && m.transcript[i].status == "running" {
+			m.transcript[i].status = status
+			return
+		}
+	}
+}
+
 func (m *Model) handleAgentEvent(event agentai.Event) {
 	switch event.Type {
 	case agentai.EventToolStarted:
@@ -514,12 +524,14 @@ func (m *Model) handleAgentEvent(event agentai.Event) {
 	case agentai.EventError:
 		m.running = false
 		if errors.Is(event.Err, securestorage.ErrMasterPasswordRequired) {
+			m.setActiveToolStatus("waiting_for_unlock")
 			m.retryPrompt = m.currentPrompt
 			m.retryPromptNeedsAppend = false
 			m.requestUnlock(screenChat, "Secure storage locked. Enter your master password to continue.")
 			return
 		}
 		if event.Err != nil {
+			m.setActiveToolStatus("failed")
 			m.currentPrompt = ""
 			m.status = event.Err.Error()
 			m.transcript = append(m.transcript, transcriptEntry{role:"system", content:event.Err.Error()})
@@ -529,6 +541,7 @@ func (m *Model) handleAgentEvent(event agentai.Event) {
 		}
 	case agentai.EventCancellation:
 		m.running = false
+		m.setActiveToolStatus("cancelled")
 		m.currentPrompt = ""
 		m.status = "Request cancelled."
 	}

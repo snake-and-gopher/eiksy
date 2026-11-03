@@ -13,6 +13,7 @@ Eiksy documentation is organized around the permanent product and implementation
 - [adr/0003-cli-local-agent.md](adr/0003-cli-local-agent.md) — standalone CLI as a local-host agent.
 - [cli.md](cli.md) — CLI startup, secure storage, provider setup, local tools and approvals.
 - [ai.md](ai.md) — AI architecture, context boundaries, native tools, approval and execution flow.
+- [agent-skills.md](agent-skills.md) — global and project-level Agent Skills, discovery format and security boundaries.
 - [release-acceptance.md](release-acceptance.md) — final release acceptance gate for the product contract.
 - [release-readiness.md](release-readiness.md) — engineering checklist for the exact release candidate.
 

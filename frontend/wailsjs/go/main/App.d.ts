@@ -88,3 +88,11 @@ export function EnsureMasterPassword(arg1:string):Promise<void>;
 export function UpdateSettings(arg1:settings.AppSettings):Promise<void>;
 
 export function ValidateCredentialPath(arg1:string,arg2:string):Promise<void>;
+
+export function SetRuntimeDiagnosticsEnabled(arg1:boolean):Promise<boolean>;
+
+export function RuntimeDiagnosticsEnabled():Promise<boolean>;
+
+export function GetRuntimeDiagnostics():Promise<Array<{time:string;level:string;message:string}>>;
+
+export function AddRuntimeDiagnostic(arg1:string,arg2:string,arg3:string):Promise<void>;

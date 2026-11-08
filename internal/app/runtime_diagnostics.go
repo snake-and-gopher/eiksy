@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -62,6 +63,13 @@ func (s *Service) appendRuntimeDiagnostic(level, message, timestamp string) {
 	if emit != nil {
 		emit("diagnostics:log", entry)
 	}
+}
+
+func (s *Service) emitDiagnosticLogf(level, format string, args ...any) {
+	if !s.RuntimeDiagnosticsEnabled() {
+		return
+	}
+	s.emitDiagnosticLog(level, fmt.Sprintf(format, args...))
 }
 
 func (s *Service) emitDiagnosticLog(level, message string) {

@@ -43,7 +43,10 @@ func (s *Service) executeSessionCommandResult(sessionID, command string) (sessio
 		if !ok {
 			return sessions.CommandExecutionResult{ExitCode: -1}, fmt.Errorf("ssh manager does not support structured command execution")
 		}
-		return executor.ExecCommandResult(s.resolveContext(s.ctx), sessionID, command)
+		s.emitDiagnosticLog("INFO", fmt.Sprintf("SSH_EXEC_START session=%s commandBytes=%d", sessionID, len([]byte(command))))
+		result, execErr := executor.ExecCommandResult(s.resolveContext(s.ctx), sessionID, command)
+		s.emitDiagnosticLog("INFO", fmt.Sprintf("SSH_EXEC_FINISHED session=%s exitCode=%d stdoutBytes=%d stderrBytes=%d durationMs=%d error=%t", sessionID, result.ExitCode, len([]byte(result.Stdout)), len([]byte(result.Stderr)), result.DurationMs, execErr != nil))
+		return result, execErr
 	}
 	return sessions.CommandExecutionResult{ExitCode: -1}, fmt.Errorf("active ssh session %q not found", sessionID)
 }

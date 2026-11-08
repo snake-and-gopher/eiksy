@@ -1662,3 +1662,23 @@ small {
 .agent-terminal-denied .agent-terminal-operation-header strong, .agent-terminal-failed .agent-terminal-operation-header strong { color: #ff9d9d; }
 .agent-workspace [data-agent-chat-form] { gap: 0.6rem; }
 .agent-workspace [data-agent-chat-form] .chat-textarea { font-family: inherit; }
+
+
+/* Current-process diagnostics window. Collection is independent of visibility. */
+.runtime-log-toolbar { display: flex; justify-content: flex-end; padding: 0.45rem 1rem 0; flex-shrink: 0; }
+.runtime-log-count { margin-left: 0.35rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.runtime-log-backdrop { position: fixed; inset: 0; z-index: 13000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: var(--bg-overlay); }
+.runtime-log-window { width: min(1100px, 96vw); height: min(760px, 90vh); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border-card); border-radius: 14px; background: var(--bg-modal); box-shadow: 0 18px 60px rgba(0,0,0,.45); }
+.runtime-log-window-header, .runtime-log-window-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.runtime-log-window-header > div { display: flex; flex-direction: column; gap: .2rem; }
+.runtime-log-window-header span, .runtime-log-window-footer { color: var(--color-muted); font-size: .78rem; }
+.runtime-log-body { flex: 1; min-height: 0; overflow: auto; padding: .6rem .8rem; font: .78rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.runtime-log-entry { display: grid; grid-template-columns: 6.5rem 3.5rem minmax(0,1fr); gap: .6rem; padding: .15rem 0; border-bottom: 1px solid var(--border-subtle); }
+.runtime-log-entry time { color: var(--color-label); }
+.runtime-log-entry strong { color: var(--color-accent); }
+.runtime-log-entry span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.runtime-log-warn strong { color: #f0a500; }
+.runtime-log-error strong { color: #e05252; }
+.runtime-log-footer { border-top: 1px solid var(--border-subtle); }
+.runtime-log-window-footer { border-top: 1px solid var(--border-subtle); border-bottom: 0; }
+@media (max-width: 700px) { .runtime-log-entry { grid-template-columns: 5rem 3rem minmax(0,1fr); gap: .35rem; } }

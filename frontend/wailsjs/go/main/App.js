@@ -165,3 +165,19 @@ export function UpdateSettings(arg1) {
 export function ValidateCredentialPath(arg1, arg2) {
   return window['go']['main']['App']['ValidateCredentialPath'](arg1, arg2);
 }
+
+export function SetRuntimeDiagnosticsEnabled(arg1) {
+  return window['go']['main']['App']['SetRuntimeDiagnosticsEnabled'](arg1);
+}
+
+export function RuntimeDiagnosticsEnabled() {
+  return window['go']['main']['App']['RuntimeDiagnosticsEnabled']();
+}
+
+export function GetRuntimeDiagnostics() {
+  return window['go']['main']['App']['GetRuntimeDiagnostics']();
+}
+
+export function AddRuntimeDiagnostic(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddRuntimeDiagnostic'](arg1, arg2, arg3);
+}

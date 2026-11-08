@@ -261,6 +261,7 @@ func (s *Service) emitNativeOperation(status, sessionID, command string, result 
 	if len(toolCallID) > 0 && strings.TrimSpace(toolCallID[0]) != "" {
 		payload["toolCallId"] = toolCallID[0]
 	}
+	s.emitDiagnosticLog("INFO", fmt.Sprintf("AGENT_OPERATE_EMITTED status=%s session=%s exitCode=%d stdoutBytes=%d stderrBytes=%d", status, redactAuditValue(sessionID), result.ExitCode, len([]byte(result.Stdout)), len([]byte(result.Stderr))))
 	s.emitFn("agent:operate", payload)
 }
 
@@ -327,6 +328,7 @@ func (s *Service) emitNativeSFTPListOperation(status, sessionID, targetPath stri
 }
 
 func (s *Service) dispatchNativeToolCall(call nativeToolCall, policy ai.CommandPolicy, activeSessionID, providerID, userMessage string, messages []nativeChatMessage) (string, bool, error) {
+	s.emitDiagnosticLog("INFO", fmt.Sprintf("TOOL_CALL_RECEIVED tool=%s toolCallId=%s session=%s", call.Function.Name, call.ID, activeSessionID))
 	if call.Type != "function" && call.Type != "" {
 		return "", false, fmt.Errorf("unsupported tool call type %q", call.Type)
 	}

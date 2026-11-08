@@ -511,12 +511,9 @@ class EiksyShell {
       this.toastQueue = this.toastQueue.filter((item) => item.id !== toastID);
       this.render();
     });
-    void RuntimeDiagnosticsEnabled().then((enabled) => {
+    void Promise.all([RuntimeDiagnosticsEnabled(), GetRuntimeDiagnostics()]).then(([enabled, entries]) => {
       this.runtimeDiagnosticsEnabled = enabled;
-      if (enabled) void GetRuntimeDiagnostics().then((entries) => {
-        this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
-        this.render();
-      });
+      this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
       this.render();
     });
     EventsOn("app:log", (...payload: unknown[]) => {

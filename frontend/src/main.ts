@@ -513,7 +513,7 @@ class EiksyShell {
     });
     void Promise.all([RuntimeDiagnosticsEnabled(), GetRuntimeDiagnostics()]).then(([enabled, entries]) => {
       this.runtimeDiagnosticsEnabled = enabled;
-      this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
+      this.runtimeLogEntries = (entries ?? []).map((entry: { time: string; level: string; message: string }) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
       this.render();
     });
     EventsOn("app:log", (...payload: unknown[]) => {

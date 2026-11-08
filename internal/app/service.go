@@ -79,6 +79,9 @@ type Service struct {
 	localAIErr      *bytes.Buffer
 	localAIStopping bool
 	localExecutor *localexec.Executor
+	diagnosticsMu sync.Mutex
+	diagnosticsEnabled bool
+	diagnosticsEntries []RuntimeDiagnosticEntry
 }
 
 type stateStore interface {

@@ -48,6 +48,10 @@ import {
   UpdateCommandPolicy,
   UpdateAgentSkills,
   UpdateSettings,
+  SetRuntimeDiagnosticsEnabled,
+  RuntimeDiagnosticsEnabled,
+  GetRuntimeDiagnostics,
+  AddRuntimeDiagnostic,
 } from "../wailsjs/go/main/App";
 import { BrowserOpenURL, EventsOn } from "../wailsjs/runtime/runtime";
 import type {
@@ -169,6 +173,15 @@ type AgentTimelineItem = {
   content?: string;
   activity?: AIActivity;
 };
+
+type RuntimeLogEntry = {
+  id: string;
+  time: string;
+  level: "DEBUG" | "INFO" | "WARN" | "ERROR";
+  message: string;
+};
+
+const MAX_RUNTIME_LOG_ENTRIES = 2000;
 
 const AI_ACTIVITY_HISTORY_KEY = "eiksy.ai-operate-history";
 const AGENT_ACTIVITY_HISTORY_KEY = "eiksy.agent-operate-history";
@@ -336,6 +349,9 @@ class EiksyShell {
   private agentTimelineInitialized = false;
   private toastQueue: NotificationItem[] = [];
   private showSidebarActionsMenu = false;
+  private runtimeLogEntries: RuntimeLogEntry[] = [];
+  private runtimeLogWindowOpen = false;
+  private runtimeDiagnosticsEnabled = false;
 
   constructor() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -495,16 +511,32 @@ class EiksyShell {
       this.toastQueue = this.toastQueue.filter((item) => item.id !== toastID);
       this.render();
     });
+    void Promise.all([RuntimeDiagnosticsEnabled(), GetRuntimeDiagnostics()]).then(([enabled, entries]) => {
+      this.runtimeDiagnosticsEnabled = enabled;
+      this.runtimeLogEntries = (entries ?? []).map((entry: { time: string; level: string; message: string }) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
+      this.render();
+    });
     EventsOn("app:log", (...payload: unknown[]) => {
       const data = payload[0] as
         { level?: string; message?: string; time?: string } | undefined;
       if (!data?.message) return;
       const level = this.normalizeNotificationLevel(data.level);
+      if (this.runtimeDiagnosticsEnabled) {
+        void AddRuntimeDiagnostic(level.toUpperCase(), data.message, data.time ?? new Date().toISOString());
+      }
       this.pushNotification(
         level,
         data.message,
         data.time ?? new Date().toISOString(),
       );
+    });
+    EventsOn("diagnostics:log", (...payload: unknown[]) => {
+      const data = payload[0] as { level?: string; message?: string; time?: string } | undefined;
+      if (!data?.message) return;
+      const level = String(data.level ?? "INFO").toUpperCase();
+      if (!this.runtimeDiagnosticsEnabled) return;
+      const normalized = (level === "DEBUG" || level === "WARN" || level === "ERROR" ? level : "INFO") as RuntimeLogEntry["level"];
+      this.appendRuntimeLog(normalized, data.message, data.time);
     });
     EventsOn("ai:status", (...payload: unknown[]) => {
       const data = payload[0] as { status?: string } | undefined;
@@ -565,7 +597,12 @@ class EiksyShell {
       recordActivity(payload[0] as Partial<AIActivity> | undefined, "ai");
     });
     EventsOn("agent:operate", (...payload: unknown[]) => {
-      recordActivity(payload[0] as Partial<AIActivity> | undefined, "agent");
+      const activity = payload[0] as Partial<AIActivity> | undefined;
+      if (activity && this.runtimeDiagnosticsEnabled) {
+        const message = `AGENT_OPERATE_RECEIVED status=${String(activity.status ?? "unknown")} session=${String(activity.sessionId ?? "")} exitCode=${String(activity.exitCode ?? "n/a")} stdoutBytes=${new TextEncoder().encode(String(activity.stdout ?? "")).length} stderrBytes=${new TextEncoder().encode(String(activity.stderr ?? "")).length}`;
+        void AddRuntimeDiagnostic("INFO", message, new Date().toISOString());
+      }
+      recordActivity(activity, "agent");
     });
 
 
@@ -736,6 +773,7 @@ class EiksyShell {
                     ${this.renderSidebarPanel()}
 
                     <main class="panel workspace-panel">
+                        <div class="runtime-log-toolbar"><button class="action-button secondary" type="button" data-toggle-runtime-collection>${this.runtimeDiagnosticsEnabled ? "Diagnostics: ON" : "Diagnostics: OFF"}</button><button class="action-button secondary" type="button" data-toggle-runtime-log ${this.runtimeLogEntries.length === 0 ? "disabled" : ""}>Open log <span class="runtime-log-count">${this.runtimeLogEntries.length}</span></button></div>
                         <div class="tab-bar">${this.renderTabs()}</div>
                         ${this.errorMessage ? `<div class="error-banner">${escapeHtml(this.errorMessage)}</div>` : ""}
                         ${
@@ -782,6 +820,7 @@ class EiksyShell {
             ${this.showSettingsModal ? this.renderSettingsModal() : ""}
             ${this.masterPasswordDialog.visible ? this.renderMasterPasswordDialog() : ""}
             ${this.renderAgentPermissionDialog()}
+            ${this.renderRuntimeLogWindow()}
             ${this.renderToasts()}
         `;
 
@@ -862,6 +901,31 @@ class EiksyShell {
   }
 
   private bindEvents(): void {
+    root?.querySelector<HTMLElement>("[data-runtime-log-backdrop]")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) {
+        this.runtimeLogWindowOpen = false;
+        this.render();
+      }
+    });
+    root?.querySelector<HTMLButtonElement>("[data-close-runtime-log]")?.addEventListener("click", () => {
+      this.runtimeLogWindowOpen = false;
+      this.render();
+    });
+    root?.querySelector<HTMLButtonElement>("[data-toggle-runtime-collection]")?.addEventListener("click", async () => {
+      const enabled = await SetRuntimeDiagnosticsEnabled(!this.runtimeDiagnosticsEnabled);
+      this.runtimeDiagnosticsEnabled = enabled;
+      if (enabled) {
+        const entries = await GetRuntimeDiagnostics();
+        this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
+      }
+      this.render();
+    });
+    root
+      ?.querySelector<HTMLButtonElement>("[data-toggle-runtime-log]")
+      ?.addEventListener("click", () => {
+        this.runtimeLogWindowOpen = !this.runtimeLogWindowOpen;
+        this.render();
+      });
     root
       ?.querySelector<HTMLDivElement>("[data-session-context-overlay]")
       ?.addEventListener("click", () => {
@@ -3080,6 +3144,49 @@ class EiksyShell {
       role: message.role,
       content: message.content,
     }));
+  }
+
+  private appendRuntimeLog(level: RuntimeLogEntry["level"], message: string, time?: string): void {
+    if (!this.runtimeDiagnosticsEnabled) return;
+    this.runtimeLogEntries.push({
+      id: crypto.randomUUID(),
+      time: time || new Date().toISOString(),
+      level,
+      message,
+    });
+    if (this.runtimeLogEntries.length > MAX_RUNTIME_LOG_ENTRIES) {
+      this.runtimeLogEntries.splice(0, this.runtimeLogEntries.length - MAX_RUNTIME_LOG_ENTRIES);
+    }
+    if (this.runtimeLogWindowOpen) {
+      this.render();
+      requestAnimationFrame(() => {
+        const body = root?.querySelector<HTMLElement>("[data-runtime-log-body]");
+        if (body) body.scrollTop = body.scrollHeight;
+      });
+    }
+  }
+
+  private renderRuntimeLogWindow(): string {
+    if (!this.runtimeLogWindowOpen) return "";
+    const entries = this.runtimeLogEntries.map((entry) => `
+      <div class="runtime-log-entry runtime-log-${entry.level.toLowerCase()}">
+        <time>${escapeHtml(new Date(entry.time).toLocaleTimeString())}</time>
+        <strong>${entry.level}</strong>
+        <span>${escapeHtml(entry.message)}</span>
+      </div>`).join("");
+    return `
+      <div class="runtime-log-backdrop" data-runtime-log-backdrop>
+        <section class="runtime-log-window" role="dialog" aria-modal="true" aria-label="Runtime diagnostics">
+          <header class="runtime-log-window-header">
+            <div><strong>Runtime diagnostics</strong><span>${this.runtimeLogEntries.length} events · current app run only</span></div>
+            <button class="icon-button" type="button" data-close-runtime-log aria-label="Close runtime log">×</button>
+          </header>
+          <div class="runtime-log-body" data-runtime-log-body>
+            ${entries || '<div class="empty-state">No diagnostic events yet. Events will appear here as Eiksy runs.</div>'}
+          </div>
+          <footer class="runtime-log-window-footer"><span>In-memory only · cleared when Eiksy exits</span></footer>
+        </section>
+      </div>`;
   }
 
   private renderAgentWorkspace(): string {

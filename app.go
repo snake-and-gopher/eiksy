@@ -114,6 +114,11 @@ func (a *App) GetShellState() app.ShellState {
 	debuglog.Printf("wails: GetShellState completed; profiles=%d activeSessions=%d history=%d", len(state.SessionProfiles), len(state.ActiveSessions), len(state.SessionHistory))
 	return state
 }
+func (a *App) SetRuntimeDiagnosticsEnabled(enabled bool) bool { return a.currentService().SetRuntimeDiagnosticsEnabled(enabled) }
+func (a *App) RuntimeDiagnosticsEnabled() bool { return a.currentService().RuntimeDiagnosticsEnabled() }
+func (a *App) GetRuntimeDiagnostics() []app.RuntimeDiagnosticEntry { return a.currentService().GetRuntimeDiagnostics() }
+func (a *App) AddRuntimeDiagnostic(level, message, timestamp string) { a.currentService().AddRuntimeDiagnostic(level, message, timestamp) }
+
 func (a *App) GetReleaseVersion() string {
 	version := resolveReleaseVersion()
 	debuglog.Printf("wails: GetReleaseVersion called; version=%q", version)

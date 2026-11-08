@@ -522,7 +522,7 @@ class EiksyShell {
       const data = payload[0] as { level?: string; message?: string; time?: string } | undefined;
       if (!data?.message) return;
       const level = String(data.level ?? "INFO").toUpperCase();
-      const normalized = level === "DEBUG" || level === "WARN" || level === "ERROR" ? level : "INFO";
+      const normalized = (level === "DEBUG" || level === "WARN" || level === "ERROR" ? level : "INFO") as RuntimeLogEntry["level"];
       this.appendRuntimeLog(normalized, data.message, data.time);
     });
     EventsOn("ai:status", (...payload: unknown[]) => {

@@ -261,7 +261,7 @@ func (s *Service) emitNativeOperation(status, sessionID, command string, result 
 	if len(toolCallID) > 0 && strings.TrimSpace(toolCallID[0]) != "" {
 		payload["toolCallId"] = toolCallID[0]
 	}
-	s.emitDiagnosticLog("INFO", fmt.Sprintf("AGENT_OPERATE_EMITTED status=%s session=%s exitCode=%d stdoutBytes=%d stderrBytes=%d", status, redactAuditValue(sessionID), result.ExitCode, len([]byte(result.Stdout)), len([]byte(result.Stderr))))
+	s.emitDiagnosticLogf("INFO", "AGENT_OPERATE_EMITTED status=%s session=%s exitCode=%d stdoutBytes=%d stderrBytes=%d", status, redactAuditValue(sessionID), result.ExitCode, len([]byte(result.Stdout)), len([]byte(result.Stderr)))
 	s.emitFn("agent:operate", payload)
 }
 

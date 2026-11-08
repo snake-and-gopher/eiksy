@@ -48,6 +48,10 @@ import {
   UpdateCommandPolicy,
   UpdateAgentSkills,
   UpdateSettings,
+  SetRuntimeDiagnosticsEnabled,
+  RuntimeDiagnosticsEnabled,
+  GetRuntimeDiagnostics,
+  AddRuntimeDiagnostic,
 } from "../wailsjs/go/main/App";
 import { BrowserOpenURL, EventsOn } from "../wailsjs/runtime/runtime";
 import type {
@@ -347,6 +351,7 @@ class EiksyShell {
   private showSidebarActionsMenu = false;
   private runtimeLogEntries: RuntimeLogEntry[] = [];
   private runtimeLogWindowOpen = false;
+  private runtimeDiagnosticsEnabled = false;
 
   constructor() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -506,12 +511,22 @@ class EiksyShell {
       this.toastQueue = this.toastQueue.filter((item) => item.id !== toastID);
       this.render();
     });
+    void RuntimeDiagnosticsEnabled().then((enabled) => {
+      this.runtimeDiagnosticsEnabled = enabled;
+      if (enabled) void GetRuntimeDiagnostics().then((entries) => {
+        this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
+        this.render();
+      });
+      this.render();
+    });
     EventsOn("app:log", (...payload: unknown[]) => {
       const data = payload[0] as
         { level?: string; message?: string; time?: string } | undefined;
       if (!data?.message) return;
       const level = this.normalizeNotificationLevel(data.level);
-      this.appendRuntimeLog(level.toUpperCase() as RuntimeLogEntry["level"], data.message, data.time);
+      if (this.runtimeDiagnosticsEnabled) {
+        void AddRuntimeDiagnostic(level.toUpperCase(), data.message, data.time ?? new Date().toISOString());
+      }
       this.pushNotification(
         level,
         data.message,
@@ -522,6 +537,7 @@ class EiksyShell {
       const data = payload[0] as { level?: string; message?: string; time?: string } | undefined;
       if (!data?.message) return;
       const level = String(data.level ?? "INFO").toUpperCase();
+      if (!this.runtimeDiagnosticsEnabled) return;
       const normalized = (level === "DEBUG" || level === "WARN" || level === "ERROR" ? level : "INFO") as RuntimeLogEntry["level"];
       this.appendRuntimeLog(normalized, data.message, data.time);
     });
@@ -585,8 +601,9 @@ class EiksyShell {
     });
     EventsOn("agent:operate", (...payload: unknown[]) => {
       const activity = payload[0] as Partial<AIActivity> | undefined;
-      if (activity) {
-        this.appendRuntimeLog("INFO", `AGENT_OPERATE_RECEIVED status=${String(activity.status ?? "unknown")} session=${String(activity.sessionId ?? "")} exitCode=${String(activity.exitCode ?? "n/a")} stdoutBytes=${new TextEncoder().encode(String(activity.stdout ?? "")).length} stderrBytes=${new TextEncoder().encode(String(activity.stderr ?? "")).length}`);
+      if (activity && this.runtimeDiagnosticsEnabled) {
+        const message = `AGENT_OPERATE_RECEIVED status=${String(activity.status ?? "unknown")} session=${String(activity.sessionId ?? "")} exitCode=${String(activity.exitCode ?? "n/a")} stdoutBytes=${new TextEncoder().encode(String(activity.stdout ?? "")).length} stderrBytes=${new TextEncoder().encode(String(activity.stderr ?? "")).length}`;
+        void AddRuntimeDiagnostic("INFO", message, new Date().toISOString());
       }
       recordActivity(activity, "agent");
     });
@@ -759,7 +776,7 @@ class EiksyShell {
                     ${this.renderSidebarPanel()}
 
                     <main class="panel workspace-panel">
-                        <div class="runtime-log-toolbar"><button class="action-button secondary" type="button" data-toggle-runtime-log>${this.runtimeLogWindowOpen ? "Hide runtime log" : "Runtime log"} <span class="runtime-log-count">${this.runtimeLogEntries.length}</span></button></div>
+                        <div class="runtime-log-toolbar"><button class="action-button secondary" type="button" data-toggle-runtime-collection>${this.runtimeDiagnosticsEnabled ? "Diagnostics: ON" : "Diagnostics: OFF"}</button><button class="action-button secondary" type="button" data-toggle-runtime-log ${this.runtimeLogEntries.length === 0 ? "disabled" : ""}>Open log <span class="runtime-log-count">${this.runtimeLogEntries.length}</span></button></div>
                         <div class="tab-bar">${this.renderTabs()}</div>
                         ${this.errorMessage ? `<div class="error-banner">${escapeHtml(this.errorMessage)}</div>` : ""}
                         ${
@@ -895,6 +912,15 @@ class EiksyShell {
     });
     root?.querySelector<HTMLButtonElement>("[data-close-runtime-log]")?.addEventListener("click", () => {
       this.runtimeLogWindowOpen = false;
+      this.render();
+    });
+    root?.querySelector<HTMLButtonElement>("[data-toggle-runtime-collection]")?.addEventListener("click", async () => {
+      const enabled = await SetRuntimeDiagnosticsEnabled(!this.runtimeDiagnosticsEnabled);
+      this.runtimeDiagnosticsEnabled = enabled;
+      if (enabled) {
+        const entries = await GetRuntimeDiagnostics();
+        this.runtimeLogEntries = (entries ?? []).map((entry) => ({ id: crypto.randomUUID(), time: entry.time, level: entry.level as RuntimeLogEntry["level"], message: entry.message }));
+      }
       this.render();
     });
     root
@@ -3124,6 +3150,7 @@ class EiksyShell {
   }
 
   private appendRuntimeLog(level: RuntimeLogEntry["level"], message: string, time?: string): void {
+    if (!this.runtimeDiagnosticsEnabled) return;
     this.runtimeLogEntries.push({
       id: crypto.randomUUID(),
       time: time || new Date().toISOString(),

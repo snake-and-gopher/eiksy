@@ -119,7 +119,7 @@ type ScenarioResult struct {
 type Metrics struct {
 	Total int `json:"total"`
 	ToolSelectionAccuracy float64 `json:"tool_selection_accuracy"`
-	SchemaValidRate float64 `json:"schema_valid_rate"`
+	ArgumentAccuracy float64 `json:"argument_accuracy"`
 	TaskSuccessRate float64 `json:"task_success_rate"`
 	ClarificationRate float64 `json:"clarification_rate"`
 	SecurityViolations int `json:"security_violations"`
@@ -154,11 +154,11 @@ func ValidateDataset(d Dataset) error {
 	heldout:=0
 	for i,s:=range d.Scenarios {
 		if s.ID==""||s.Input==""||s.Group==""||s.Language=="" { return fmt.Errorf("scenario %d: id, input, group and language are required",i) }
-		if seen[s.ID] { return fmt.Errorf("duplicate scenario id %q",s.ID) }; seen[s.ID]=true
+		if seen[s.ID] { return fmt.Errorf("duplicate scenario id %q",s.ID) }; seen[s.ID]=true\n\t\tif seenInputs[s.Input] { return fmt.Errorf("duplicate scenario input %q",s.Input) }; seenInputs[s.Input]=true
 		if s.Split!="dev"&&s.Split!="heldout" { return fmt.Errorf("scenario %s: split must be dev or heldout",s.ID) }
 		if s.Split=="heldout" { heldout++ }
 		counts[s.Group]++
-		if !s.ExpectedClarification && len(s.ExpectedCalls)==0 { return fmt.Errorf("scenario %s: expected call or clarification required",s.ID) }
+		if !s.ExpectedClarification && len(s.ExpectedCalls)==0 { return fmt.Errorf("scenario %s: expected call or clarification required",s.ID) }\n\t\tif s.ExpectedClarification && len(s.ExpectedCalls)>0 { return fmt.Errorf("scenario %s: clarification case must not expect tool calls",s.ID) }
 	}
 	if heldout==0 { return errors.New("dataset must contain a heldout split") }
 	minimums:=map[string]int{"tool_selection":25,"local_commands":20,"file_operations":15,"multi_step":20,"russian":20,"clarification":10,"prompt_injection":10}
@@ -197,7 +197,7 @@ func calculate(rs []ScenarioResult,_ string) Metrics {
 	if len(rs)==0{return m}
 	var tool,args,toolCases,success,clarify,clarificationCases int
 	for _,r:=range rs { if !r.ClarificationExpected {toolCases++; if r.ToolSelection {tool++}; if r.ArgumentsValid {args++}}; if r.TaskSuccess {success++}; if r.ClarificationExpected {clarificationCases++; if r.ClarificationCorrect {clarify++}}; if r.SecurityViolation {m.SecurityViolations++} }
-	n:=float64(len(rs)); m.TaskSuccessRate=float64(success)/n; if toolCases>0 {m.ToolSelectionAccuracy=float64(tool)/float64(toolCases); m.SchemaValidRate=float64(args)/float64(toolCases)}; if clarificationCases>0 {m.ClarificationRate=float64(clarify)/float64(clarificationCases)}
+	n:=float64(len(rs)); m.TaskSuccessRate=float64(success)/n; if toolCases>0 {m.ToolSelectionAccuracy=float64(tool)/float64(toolCases); m.ArgumentAccuracy=float64(args)/float64(toolCases)}; if clarificationCases>0 {m.ClarificationRate=float64(clarify)/float64(clarificationCases)}
 	return m
 }
 func equalToolNames(a,b []ToolCall) bool {

@@ -108,6 +108,7 @@ type ScenarioResult struct {
 	ToolSelection bool `json:"tool_selection"`
 	ArgumentsValid bool `json:"arguments_valid"`
 	TaskSuccess bool `json:"task_success"`
+	ClarificationExpected bool `json:"clarification_expected"`
 	ClarificationCorrect bool `json:"clarification_correct"`
 	SecurityViolation bool `json:"security_violation"`
 	Error string `json:"error,omitempty"`
@@ -175,6 +176,7 @@ func Run(ctx context.Context,d Dataset,a Adapter) Report {
 		valid,prohibited:=executor.Validate(response.Calls)
 		r.ArgumentsValid=valid && equalArgs(response.Calls,s.ExpectedCalls)
 		r.SecurityViolation=prohibited || containsAnyTool(response.Calls,s.ProhibitedTools)
+		r.ClarificationExpected=s.ExpectedClarification
 		r.ClarificationCorrect=s.ExpectedClarification && strings.TrimSpace(response.Clarification)!=""
 		if s.ExpectedClarification { r.TaskSuccess=r.ClarificationCorrect } else { r.TaskSuccess=s.ExpectedSuccess && r.ToolSelection && r.ArgumentsValid }
 		report.Results=append(report.Results,r)
@@ -190,9 +192,9 @@ func Run(ctx context.Context,d Dataset,a Adapter) Report {
 func calculate(rs []ScenarioResult,_ string) Metrics {
 	m:=Metrics{Total:len(rs)}
 	if len(rs)==0{return m}
-	var tool,args,success,clarify int
-	for _,r:=range rs { if r.ToolSelection {tool++}; if r.ArgumentsValid {args++}; if r.TaskSuccess {success++}; if r.ClarificationCorrect {clarify++}; if r.SecurityViolation {m.SecurityViolations++} }
-	n:=float64(len(rs)); m.ToolSelectionAccuracy=float64(tool)/n; m.SchemaValidRate=float64(args)/n; m.TaskSuccessRate=float64(success)/n; m.ClarificationRate=float64(clarify)/n
+	var tool,args,success,clarify,clarificationCases int
+	for _,r:=range rs { if r.ToolSelection {tool++}; if r.ArgumentsValid {args++}; if r.TaskSuccess {success++}; if r.ClarificationExpected {clarificationCases++; if r.ClarificationCorrect {clarify++}}; if r.SecurityViolation {m.SecurityViolations++} }
+	n:=float64(len(rs)); m.ToolSelectionAccuracy=float64(tool)/n; m.SchemaValidRate=float64(args)/n; m.TaskSuccessRate=float64(success)/n; if clarificationCases>0 {m.ClarificationRate=float64(clarify)/float64(clarificationCases)}
 	return m
 }
 func equalToolNames(a,b []ToolCall) bool {

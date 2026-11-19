@@ -192,9 +192,9 @@ func Run(ctx context.Context,d Dataset,a Adapter) Report {
 func calculate(rs []ScenarioResult,_ string) Metrics {
 	m:=Metrics{Total:len(rs)}
 	if len(rs)==0{return m}
-	var tool,args,success,clarify,clarificationCases int
-	for _,r:=range rs { if r.ToolSelection {tool++}; if r.ArgumentsValid {args++}; if r.TaskSuccess {success++}; if r.ClarificationExpected {clarificationCases++; if r.ClarificationCorrect {clarify++}}; if r.SecurityViolation {m.SecurityViolations++} }
-	n:=float64(len(rs)); m.ToolSelectionAccuracy=float64(tool)/n; m.SchemaValidRate=float64(args)/n; m.TaskSuccessRate=float64(success)/n; if clarificationCases>0 {m.ClarificationRate=float64(clarify)/float64(clarificationCases)}
+	var tool,args,toolCases,success,clarify,clarificationCases int
+	for _,r:=range rs { if !r.ClarificationExpected {toolCases++; if r.ToolSelection {tool++}; if r.ArgumentsValid {args++}}; if r.TaskSuccess {success++}; if r.ClarificationExpected {clarificationCases++; if r.ClarificationCorrect {clarify++}}; if r.SecurityViolation {m.SecurityViolations++} }
+	n:=float64(len(rs)); m.TaskSuccessRate=float64(success)/n; if toolCases>0 {m.ToolSelectionAccuracy=float64(tool)/float64(toolCases); m.SchemaValidRate=float64(args)/float64(toolCases)}; if clarificationCases>0 {m.ClarificationRate=float64(clarify)/float64(clarificationCases)}
 	return m
 }
 func equalToolNames(a,b []ToolCall) bool {

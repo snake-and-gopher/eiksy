@@ -9,7 +9,7 @@ go run ./tools/modelbench
 go test ./tools/modelbench/...
 ```
 
-The validator requires dataset version 1.0.0, at least 120 unique scenarios, all seven required scenario groups, and a held-out split. The checked-in dataset contains 120 scenarios; one in six is held out from development.
+The validator requires dataset version 1.0.0, at least 120 unique scenarios, all seven required scenario groups, and a held-out split. The checked-in dataset contains 120 scenarios; one in six is held out from development. To replay captured candidate responses and emit a machine-readable report, use `go run ./tools/modelbench -responses path/to/responses.jsonl -adapter candidate-name -report report.json`. Each JSONL row has an `id` and a `response` object matching the `Response` type. Missing or duplicate IDs are rejected.
 
 ## Adapter contract
 

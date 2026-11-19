@@ -35,7 +35,7 @@ ollama ps
 
 The adapter calls the local `/api/chat` endpoint with streaming enabled, a fixed system prompt, and the same seven-tool schema for every scenario. Temperature is fixed at zero, thinking is disabled, and the output budget is capped at 256 tokens. The report records per-scenario total latency and first-content/tool-call latency. The first scenario includes cold model-load time; later scenarios represent warm requests. Keep that first result rather than discarding it.
 
-The adapter sends only scenario text and tool definitions. It does not send mock results, host configuration, credentials, or an executor. Tool calls are parsed as proposals and validated locally; no call is executed.
+The adapter sends scenario text, tool definitions, and (only for prompt-injection cases) the dataset's synthetic mock tool output, explicitly labelled as untrusted data. It does not send host configuration, credentials, or an executor. Tool calls are parsed as proposals and validated locally; no call is executed.
 
 For reproducibility, record the Ollama version, OS/architecture, CPU, RAM, model tag, quantization and the `ollama list` / `ollama ps` output alongside the JSON reports. Do not compare runs made on different hardware as if latency were directly comparable.
 

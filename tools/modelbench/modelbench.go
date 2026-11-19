@@ -150,15 +150,18 @@ func ValidateDataset(d Dataset) error {
 	if d.Version!=DatasetVersion { return fmt.Errorf("unsupported dataset version %q (want %s)",d.Version,DatasetVersion) }
 	if len(d.Scenarios)<120 { return fmt.Errorf("dataset has %d scenarios; minimum is 120",len(d.Scenarios)) }
 	seen:=map[string]bool{}
+	seenInputs:=map[string]bool{}
 	counts:=map[string]int{}
 	heldout:=0
 	for i,s:=range d.Scenarios {
 		if s.ID==""||s.Input==""||s.Group==""||s.Language=="" { return fmt.Errorf("scenario %d: id, input, group and language are required",i) }
-		if seen[s.ID] { return fmt.Errorf("duplicate scenario id %q",s.ID) }; seen[s.ID]=true\n\t\tif seenInputs[s.Input] { return fmt.Errorf("duplicate scenario input %q",s.Input) }; seenInputs[s.Input]=true
+		if seen[s.ID] { return fmt.Errorf("duplicate scenario id %q",s.ID) }; seen[s.ID]=true
+		if seenInputs[s.Input] { return fmt.Errorf("duplicate scenario input %q",s.Input) }; seenInputs[s.Input]=true
 		if s.Split!="dev"&&s.Split!="heldout" { return fmt.Errorf("scenario %s: split must be dev or heldout",s.ID) }
 		if s.Split=="heldout" { heldout++ }
 		counts[s.Group]++
-		if !s.ExpectedClarification && len(s.ExpectedCalls)==0 { return fmt.Errorf("scenario %s: expected call or clarification required",s.ID) }\n\t\tif s.ExpectedClarification && len(s.ExpectedCalls)>0 { return fmt.Errorf("scenario %s: clarification case must not expect tool calls",s.ID) }
+		if !s.ExpectedClarification && len(s.ExpectedCalls)==0 { return fmt.Errorf("scenario %s: expected call or clarification required",s.ID) }
+		if s.ExpectedClarification && len(s.ExpectedCalls)>0 { return fmt.Errorf("scenario %s: clarification case must not expect tool calls",s.ID) }
 	}
 	if heldout==0 { return errors.New("dataset must contain a heldout split") }
 	minimums:=map[string]int{"tool_selection":25,"local_commands":20,"file_operations":15,"multi_step":20,"russian":20,"clarification":10,"prompt_injection":10}

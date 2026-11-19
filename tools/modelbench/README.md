@@ -1,6 +1,6 @@
 # Compact model benchmark harness
 
-This directory contains the isolated Phase 1 benchmark harness for ADR 0004.
+This directory contains the isolated benchmark harness for ADR 0004. It never executes proposed tools and does not change production CLI or Desktop behavior.
 
 ## Validate the dataset
 
@@ -9,7 +9,43 @@ go run ./cmd/modelbench
 go test ./tools/modelbench/...
 ```
 
-The validator requires dataset version 1.0.0, at least 120 unique scenarios, all seven required scenario groups, and a held-out split. The checked-in dataset contains 120 scenarios; one in six is held out from development. To replay captured candidate responses and emit a machine-readable report, use `go run ./cmd/modelbench -responses path/to/responses.jsonl -adapter candidate-name -report report.json`. Each JSONL row has an `id` and a `response` object matching the `Response` type. Missing or duplicate IDs are rejected.
+The version 1.0.0 dataset contains 120 distinct prompts across seven groups, with 20 held-out cases (one in six). Held-out cases must not be used for prompt tuning or fine-tuning.
+
+## Run local model candidates with Ollama
+
+Ollama is used only as a temporary benchmark runtime. It is not added as an Eiksy dependency and is not the intended production runtime.
+
+Use the same Ollama version, host, model settings, and dataset for both candidates. FunctionGemma requires Ollama 0.13.5 or newer.
+
+```sh
+# Install/update Ollama separately, then pull the two candidates.
+ollama pull functiongemma
+ollama pull qwen3:0.6b
+
+# Run each candidate independently; keep the reports separate.
+go run ./cmd/modelbench -model functiongemma -report functiongemma.json
+go run ./cmd/modelbench -model qwen3:0.6b -report qwen3-0.6b.json
+
+# Record model artifact size and currently loaded memory after each run.
+ollama list
+ollama ps
+```
+
+The adapter calls the local `/api/chat` endpoint with streaming enabled, a fixed system prompt, and the same seven-tool schema for every scenario. Temperature is fixed at zero, thinking is disabled, and the output budget is capped at 256 tokens. The report records per-scenario total latency and first-content/tool-call latency. The first scenario includes cold model-load time; later scenarios represent warm requests. Keep that first result rather than discarding it.
+
+The adapter sends only scenario text and tool definitions. It does not send mock results, host configuration, credentials, or an executor. Tool calls are parsed as proposals and validated locally; no call is executed.
+
+For reproducibility, record the Ollama version, OS/architecture, CPU, RAM, model tag, quantization and the `ollama list` / `ollama ps` output alongside the JSON reports. Do not compare runs made on different hardware as if latency were directly comparable.
+
+## Replay captured responses
+
+For deterministic regression tests, replay JSONL output captured from another backend:
+
+```sh
+go run ./cmd/modelbench -responses path/to/responses.jsonl -adapter candidate-name -report report.json
+```
+
+Each JSONL row has an `id` and a `response` object matching the `Response` type. Missing or duplicate IDs are rejected.
 
 ## Adapter contract
 
@@ -19,7 +55,7 @@ Candidate integrations implement `modelbench.Adapter`:
 - return structured proposed tool calls, clarification text, and an optional final response;
 - do not receive an executor, credentials, host configuration, or unrestricted environment.
 
-`JSONLAdapter` replays captured responses for deterministic regression tests. A backend-specific adapter should live in a separate integration package and be tested against the same dataset and tool contract. This first PR intentionally does not add model runtimes, model downloads, or production inference dependencies.
+`JSONLAdapter` replays captured responses. `OllamaAdapter` is an optional benchmark-only adapter for a local Ollama server. A future production backend must remain isolated from the mock executor and be reviewed separately.
 
 ## Safety boundary
 
@@ -27,19 +63,21 @@ Candidate integrations implement `modelbench.Adapter`:
 
 ## Dataset format
 
-`dataset/v1.json` is a versioned JSON document. Each scenario includes:
+Each scenario includes:
 
 - stable ID, split, group, language, and user input;
 - expected tool-call sequence or expected clarification;
 - expected success flag;
 - optional prohibited tool names and deterministic mock result data.
 
-The held-out split is marked in data and must not be used for prompt tuning or fine-tuning. Do not add secrets, real hostnames, production paths, or private command output.
+Do not add secrets, real hostnames, production paths, or private command output.
 
 ## Metrics
 
-The report types expose tool-selection accuracy, argument/schema-valid rate, task success, clarification success, and security-violation counts overall and grouped by scenario family and language. Per-scenario latency and platform metadata are retained. Model-specific token, memory, artifact, and runtime measurements are added by the backend integration phase; this harness does not fabricate those values.
+The report exposes tool-selection accuracy and argument/schema-valid rate over tool-required scenarios only, task success over all scenarios, clarification success over clarification scenarios, and security-violation counts. Metrics are grouped by scenario family and language. Per-scenario total and first-token latency are retained.
 
-## Current limitation
+Model artifact size and process memory are recorded separately using `ollama list` and `ollama ps`; the harness does not infer or fabricate these values.
 
-This PR validates the dataset and defines the adapter/report contract. It does not claim to have run FunctionGemma or Qwen3. No production CLI or Desktop behavior is changed.
+## Interpretation limits
+
+This is a small, task-specific screening benchmark, not a general language benchmark. A high score does not prove safe execution: Eiksy's policy engine and approval boundary remain mandatory. FunctionGemma is designed as a base for task-specific fine-tuning, so its zero-shot score is a baseline rather than a final production verdict.

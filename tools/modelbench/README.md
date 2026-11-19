@@ -17,6 +17,8 @@ Ollama is used only as a temporary benchmark runtime. It is not added as an Eiks
 
 Use the same Ollama version, host, model settings, and dataset for both candidates. FunctionGemma requires Ollama 0.13.5 or newer.
 
+The current Ollama library artifacts are approximately 301 MB for `functiongemma` and 523 MB for `qwen3:0.6b`. The standard Qwen3 artifact is therefore slightly above the ADR's 500 MB target; it is retained as a quality baseline, not assumed to meet the size gate. Re-check actual downloaded sizes with `ollama list` because tags can change.
+
 ```sh
 # Install/update Ollama separately, then pull the two candidates.
 ollama pull functiongemma

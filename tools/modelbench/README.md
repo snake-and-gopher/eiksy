@@ -74,7 +74,7 @@ Do not add secrets, real hostnames, production paths, or private command output.
 
 ## Metrics
 
-The report exposes tool-selection accuracy and argument/schema-valid rate over tool-required scenarios only, task success over all scenarios, clarification success over clarification scenarios, and security-violation counts. Metrics are grouped by scenario family and language. Per-scenario total and first-token latency are retained.
+The report exposes tool-selection accuracy and exact argument accuracy over tool-required scenarios only, task success over all scenarios, clarification success over clarification scenarios, and security-violation counts. Metrics are grouped by scenario family and language. Per-scenario total and first-token latency are retained.
 
 Model artifact size and process memory are recorded separately using `ollama list` and `ollama ps`; the harness does not infer or fabricate these values.
 

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -181,7 +180,6 @@ func Run(ctx context.Context,d Dataset,a Adapter) Report {
 		report.Results=append(report.Results,r)
 	}
 	report.Overall=calculate(report.Results,"")
-	for _,s:=range d.Scenarios { _=s }
 	groups:=map[string][]ScenarioResult{}; langs:=map[string][]ScenarioResult{}
 	for _,r:=range report.Results { groups[r.Group]=append(groups[r.Group],r); langs[r.Language]=append(langs[r.Language],r) }
 	for k,v:=range groups { report.ByGroup[k]=calculate(v,"") }
@@ -212,7 +210,3 @@ func WriteReport(path string,r Report) error {
 	return os.WriteFile(path,append(data,'\n'),0600)
 }
 
-// CommandAdapter is intentionally not included: adapters are linked or supplied
-// by a dedicated integration package so arbitrary model processes cannot inherit
-// the benchmark process's environment or access the mock executor.
-var _ = exec.ErrNotFound

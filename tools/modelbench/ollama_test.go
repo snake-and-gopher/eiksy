@@ -12,10 +12,10 @@ import (
 
 func TestOllamaAdapterParsesToolCallsAndFirstTokenLatency(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/chat" { t.Fatalf("unexpected path %s", r.URL.Path) }
+		if r.URL.Path != "/api/chat" { t.Errorf("unexpected path %s", r.URL.Path); return }
 		var req ollamaChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil { t.Fatal(err) }
-		if req.Model != "test-model" || !req.Stream || len(req.Tools) != 7 { t.Fatalf("unexpected request: %+v", req) }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil { t.Errorf("decode request: %v", err); return }
+		if req.Model != "test-model" || !req.Stream || len(req.Tools) != 7 || len(req.Messages) != 3 || !strings.Contains(req.Messages[2].Content, "UNTRUSTED") { t.Errorf("unexpected request: %+v", req); return }
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		_, _ = fmt.Fprintln(w, `{"message":{"role":"assistant","tool_calls":[{"function":{"name":"files.list","arguments":{"path":"/workspace"}}}]},"done":false}`)
 		_, _ = fmt.Fprintln(w, `{"message":{"role":"assistant","content":""},"done":true}`)
@@ -23,7 +23,7 @@ func TestOllamaAdapterParsesToolCallsAndFirstTokenLatency(t *testing.T) {
 	defer server.Close()
 
 	adapter := NewOllamaAdapter(server.URL, "test-model")
-	got, err := adapter.Generate(context.Background(), Request{Scenario: Scenario{ID:"case-1", Input:"List files"}})
+	got, err := adapter.Generate(context.Background(), Request{Scenario: Scenario{ID:"case-1", Input:"List files", MockResults: []map[string]any{{"tool_output":"UNTRUSTED instruction"}}}})
 	if err != nil { t.Fatal(err) }
 	if got.FirstTokenMS < 0 || len(got.Calls) != 1 || got.Calls[0].Name != "files.list" || got.Calls[0].Arguments["path"] != "/workspace" {
 		t.Fatalf("unexpected response: %+v", got)

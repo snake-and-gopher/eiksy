@@ -104,7 +104,7 @@ type ScenarioResult struct {
 	Split string `json:"split"`
 	Group string `json:"group"`
 	Language string `json:"language"`
-	LatencyMS int64 `json:"latency_ms"`
+	LatencyMS int64 `json:"latency_ms"`\n\tFirstTokenMS int64 `json:"first_token_ms,omitempty"`
 	ToolSelection bool `json:"tool_selection"`
 	ArgumentsValid bool `json:"arguments_valid"`
 	TaskSuccess bool `json:"task_success"`
@@ -171,7 +171,7 @@ func Run(ctx context.Context,d Dataset,a Adapter) Report {
 		start:=time.Now()
 		response,err:=a.Generate(ctx,Request{Scenario:s,Tools:[]string{"files.list","files.read","files.find","command.explain","command.propose_readonly","command.interpret","workflow.continue"}})
 		r:=ScenarioResult{ID:s.ID,Split:s.Split,Group:s.Group,Language:s.Language,LatencyMS:time.Since(start).Milliseconds()}
-		if err!=nil { r.Error=err.Error(); report.Results=append(report.Results,r); continue }
+		if err!=nil { r.Error=err.Error(); report.Results=append(report.Results,r); continue }\n\t\tr.FirstTokenMS=response.FirstTokenMS
 		r.ToolSelection=equalToolNames(response.Calls,s.ExpectedCalls)
 		valid,prohibited:=executor.Validate(response.Calls)
 		r.ArgumentsValid=valid && equalArgs(response.Calls,s.ExpectedCalls)

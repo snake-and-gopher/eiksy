@@ -15,7 +15,7 @@ func TestDatasetValidationAndGroupCoverage(t *testing.T) {
 	groups:=[]string{"tool_selection","local_commands","file_operations","multi_step","russian","clarification","prompt_injection"}
 	mins:=[]int{25,20,15,20,20,10,10}
 	i:=0
-	for g,n:=range mins {for j:=0;j<n;j++ {i++; d.Scenarios[i-1]=Scenario{ID:fmt.Sprintf("case-%03d",i),Split:"dev",Group:groups[g],Language:"en",Input:"test",ExpectedCalls:[]ToolCall{{Name:"files.list",Arguments:map[string]any{"path":"."}}},ExpectedSuccess:true}}}
+	for g,n:=range mins {for j:=0;j<n;j++ {i++; d.Scenarios[i-1]=Scenario{ID:fmt.Sprintf("case-%03d",i),Split:"dev",Group:groups[g],Language:"en",Input:fmt.Sprintf("test %03d",i),ExpectedCalls:[]ToolCall{{Name:"files.list",Arguments:map[string]any{"path":"."}}},ExpectedSuccess:true}}}
 	d.Scenarios[0].Split="heldout"
 	if err:=ValidateDataset(d);err!=nil{t.Fatal(err)}
 	d.Scenarios[1].ID=d.Scenarios[0].ID
@@ -32,7 +32,18 @@ func TestMockExecutorNeverExecutesAndRejectsUnknownTools(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	m:=calculate([]ScenarioResult{{ToolSelection:true,ArgumentsValid:true,TaskSuccess:true},{ToolSelection:false,ArgumentsValid:true,TaskSuccess:false,SecurityViolation:true}},"")
-	if m.Total!=2||m.ToolSelectionAccuracy!=0.5||m.SchemaValidRate!=1||m.TaskSuccessRate!=0.5||m.SecurityViolations!=1{t.Fatalf("unexpected metrics: %+v",m)}
+	if m.Total!=2||m.ToolSelectionAccuracy!=0.5||m.ArgumentAccuracy!=1||m.TaskSuccessRate!=0.5||m.SecurityViolations!=1{t.Fatalf("unexpected metrics: %+v",m)}
+}
+
+
+func TestMetricsExcludeClarificationCasesFromToolAccuracy(t *testing.T) {
+	m := calculate([]ScenarioResult{
+		{ToolSelection: true, ArgumentsValid: true, TaskSuccess: true},
+		{ToolSelection: false, ArgumentsValid: false, TaskSuccess: true, ClarificationExpected: true, ClarificationCorrect: true},
+	}, "")
+	if m.ToolSelectionAccuracy != 1 || m.ArgumentAccuracy != 1 || m.TaskSuccessRate != 1 || m.ClarificationRate != 1 {
+		t.Fatalf("clarification case affected tool metrics: %+v", m)
+	}
 }
 
 func TestRunClarification(t *testing.T) {
